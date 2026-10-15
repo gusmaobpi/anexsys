@@ -417,6 +417,12 @@ textarea {
   min-width: 110px;
 }
 
+.os-items-table .data-table th:nth-child(8),
+.os-items-table .data-table td:nth-child(8) {
+  width: 96px;
+  min-width: 96px;
+}
+
 .os-item-seq {
   font-weight: 800;
   font-size: 16px;
@@ -462,6 +468,12 @@ textarea {
 
 .os-items-table .data-table input.os-item-input--money {
   min-width: 112px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.os-items-table .data-table input.os-item-input--minutes {
+  min-width: 72px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }

@@ -42,6 +42,7 @@ test('maps persisted items into visible editable grid rows', () => {
       quantity: '1.0000',
       unitPrice: '25.00',
       discountValue: '0.00',
+      estimatedMinutes: 15,
       status: 'open',
     },
     {
@@ -72,6 +73,7 @@ test('maps persisted items into visible editable grid rows', () => {
       quantity: '1',
       unitPrice: '25,00',
       discountValue: '0,00',
+      estimatedMinutes: '15',
       status: 'open',
       isEditing: false,
       isNew: false,
@@ -94,6 +96,7 @@ test('builds create payload for all visible item rows', () => {
     quantity: '2',
     unitPrice: '80',
     discountValue: '10',
+    estimatedMinutes: '45',
   });
 
   assert.deepEqual(buildCreateServiceOrderItemsPayload(updatedRows), [
@@ -109,6 +112,7 @@ test('builds create payload for all visible item rows', () => {
       quantity: 1,
       unitPrice: 80,
       discountValue: 10,
+      estimatedMinutes: 45,
     },
   ]);
 });

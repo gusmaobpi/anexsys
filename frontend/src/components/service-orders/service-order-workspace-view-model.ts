@@ -40,6 +40,7 @@ export type PersistedServiceOrderItem = {
   quantity: string;
   unitPrice: string | null;
   discountValue: string | null;
+  estimatedMinutes?: number | null;
   status: string;
   heldForRework?: boolean;
 };
@@ -59,6 +60,7 @@ export type ServiceOrderItemGridRow = {
   quantity: string;
   unitPrice: string;
   discountValue: string;
+  estimatedMinutes: string;
   status: string;
   isEditing: boolean;
   isNew: boolean;
@@ -77,6 +79,7 @@ type ItemPayload = {
   quantity: number;
   unitPrice?: number;
   discountValue?: number;
+  estimatedMinutes?: number;
 };
 
 const osMoneyAmountFormatter = new Intl.NumberFormat("pt-BR", {
@@ -146,7 +149,15 @@ export function previewNextLinkedServiceOrderNo(orderNo: string, existingOrderNo
   return `${base}-${max + 1}`;
 }
 
+function parseEstimatedMinutes(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function buildPayload(row: ServiceOrderItemGridRow): ItemPayload {
+  const estimatedMinutes = parseEstimatedMinutes(row.estimatedMinutes);
   return {
     itemType: row.itemType.trim(),
     productId: row.productId || undefined,
@@ -159,6 +170,7 @@ function buildPayload(row: ServiceOrderItemGridRow): ItemPayload {
     quantity: 1,
     unitPrice: parseOptionalNumber(row.unitPrice),
     discountValue: parseOptionalNumber(row.discountValue),
+    ...(estimatedMinutes !== undefined ? { estimatedMinutes } : {}),
   };
 }
 
@@ -187,7 +199,8 @@ function rowsMatch(left: ServiceOrderItemGridRow, right: ServiceOrderItemGridRow
     && left.serialNo.trim() === right.serialNo.trim()
     && numericFieldEquals(left.quantity, right.quantity, false)
     && numericFieldEquals(left.unitPrice, right.unitPrice, true)
-    && numericFieldEquals(left.discountValue, right.discountValue, true);
+    && numericFieldEquals(left.discountValue, right.discountValue, true)
+    && numericFieldEquals(left.estimatedMinutes, right.estimatedMinutes, true);
 }
 
 export function createEmptyServiceOrderItemGridRow(itemNo: number): ServiceOrderItemGridRow {
@@ -206,6 +219,7 @@ export function createEmptyServiceOrderItemGridRow(itemNo: number): ServiceOrder
     quantity: "1",
     unitPrice: "",
     discountValue: "",
+    estimatedMinutes: "",
     status: "open",
     isEditing: true,
     isNew: true,
@@ -231,6 +245,7 @@ export function mapServiceOrderItemsToGridRows(items: PersistedServiceOrderItem[
       quantity: "1",
       unitPrice: formatOsMoneyInput(item.unitPrice),
       discountValue: formatOsMoneyInput(item.discountValue),
+      estimatedMinutes: item.estimatedMinutes != null ? String(item.estimatedMinutes) : "",
       status: item.status,
       isEditing: false,
       isNew: false,
@@ -280,6 +295,7 @@ export function updateServiceOrderItemGridRow(
       | "quantity"
       | "unitPrice"
       | "discountValue"
+      | "estimatedMinutes"
       | "isEditing"
     >
   >,

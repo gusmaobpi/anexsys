@@ -450,7 +450,7 @@ export function ServiceOrdersWorkspace() {
         .map((price) => ({
           id: price.serviceId,
           label: price.serviceName,
-          hint: formatOsMoney(Number(price.suggestedPrice)),
+          hint: `${formatOsMoney(Number(price.suggestedPrice))} • ${price.estimatedMinutes} min`,
         }));
       if (row.serviceId && !options.some((option) => option.id === row.serviceId)) {
         const fallback = services.find((service) => service.id === row.serviceId);
@@ -470,6 +470,16 @@ export function ServiceOrdersWorkspace() {
         (price) => price.productId === productId && price.serviceId === serviceId && price.status !== "inactive",
       );
       return priced ? formatSuggestedPrice(priced.suggestedPrice) : "";
+    },
+    [productPrices],
+  );
+
+  const estimatedMinutesFor = useCallback(
+    (productId: string, serviceId: string) => {
+      const priced = productPrices.find(
+        (price) => price.productId === productId && price.serviceId === serviceId && price.status !== "inactive",
+      );
+      return priced ? String(priced.estimatedMinutes) : "";
     },
     [productPrices],
   );
@@ -1652,6 +1662,7 @@ export function ServiceOrdersWorkspace() {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           discountValue: item.discountValue,
+          estimatedMinutes: item.estimatedMinutes,
         }),
       });
     }
@@ -2482,6 +2493,7 @@ export function ServiceOrdersWorkspace() {
                         <th>Marca</th>
                         <th>Modelo</th>
                         <th>Série</th>
+                        <th title="Tempo previsto do combo produto + serviço">Tempo (min)</th>
                         <th>Valor</th>
                         <th>Desconto</th>
                         <th>Subtotal</th>
@@ -2523,8 +2535,11 @@ export function ServiceOrdersWorkspace() {
                                       productId: nextProductId,
                                       itemType: option?.label ?? "",
                                       ...(stillValid
-                                        ? { unitPrice: suggestedPriceFor(nextProductId, row.serviceId) }
-                                        : { serviceId: "", description: "", unitPrice: "" }),
+                                        ? {
+                                            unitPrice: suggestedPriceFor(nextProductId, row.serviceId),
+                                            estimatedMinutes: estimatedMinutesFor(nextProductId, row.serviceId),
+                                          }
+                                        : { serviceId: "", description: "", unitPrice: "", estimatedMinutes: "" }),
                                     });
                                   })
                                 }
@@ -2568,6 +2583,7 @@ export function ServiceOrdersWorkspace() {
                                       serviceId: option?.id ?? "",
                                       description: option?.label ?? "",
                                       unitPrice: option?.id ? suggestedPriceFor(row.productId, option.id) : "",
+                                      estimatedMinutes: option?.id ? estimatedMinutesFor(row.productId, option.id) : "",
                                     }),
                                   );
                                 }}
@@ -2596,6 +2612,7 @@ export function ServiceOrdersWorkspace() {
                                                 serviceId: created.serviceId,
                                                 description: created.serviceName,
                                                 unitPrice: formatSuggestedPrice(created.suggestedPrice),
+                                                estimatedMinutes: String(created.estimatedMinutes),
                                               }),
                                             );
                                             completeCreate({
@@ -2672,6 +2689,23 @@ export function ServiceOrdersWorkspace() {
                             </td>
                             <td>
                               <input
+                                className="os-item-input os-item-input--minutes"
+                                disabled={!editable}
+                                inputMode="numeric"
+                                placeholder="0"
+                                title="Tempo previsto em minutos"
+                                value={row.estimatedMinutes ?? ""}
+                                onChange={(event) =>
+                                  setItemRows((current) =>
+                                    updateServiceOrderItemGridRow(current, row.localId, {
+                                      estimatedMinutes: event.target.value.replace(/\D/g, "").slice(0, 4),
+                                    }),
+                                  )
+                                }
+                              />
+                            </td>
+                            <td>
+                              <input
                                 className="os-item-input os-item-input--money"
                                 disabled={!editable}
                                 inputMode="numeric"
@@ -2738,7 +2772,7 @@ export function ServiceOrdersWorkspace() {
                       })}
                       {visibleItemRows.length === 0 ? (
                         <tr>
-                          <td colSpan={10}>
+                          <td colSpan={11}>
                             <div className="empty-state">Nenhuma peça na grade. Use Adicionar peça para continuar.</div>
                           </td>
                         </tr>
