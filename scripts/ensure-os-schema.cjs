@@ -87,6 +87,19 @@ async function main() {
       ADD COLUMN IF NOT EXISTS serial_no varchar(120) NOT NULL DEFAULT ''
     `);
     await client.query(`
+      ALTER TABLE IF EXISTS service_order_items
+      ADD COLUMN IF NOT EXISTS time_minutes integer NULL
+    `);
+    await client.query(`
+      ALTER TABLE IF EXISTS service_order_items
+      DROP CONSTRAINT IF EXISTS chk_service_order_items_time_minutes
+    `);
+    await client.query(`
+      ALTER TABLE IF EXISTS service_order_items
+      ADD CONSTRAINT chk_service_order_items_time_minutes
+      CHECK (time_minutes IS NULL OR time_minutes >= 1)
+    `);
+    await client.query(`
       ALTER TABLE IF EXISTS service_orders
       ADD COLUMN IF NOT EXISTS origin_service_order_id uuid
     `);
@@ -232,6 +245,106 @@ async function main() {
       CREATE UNIQUE INDEX IF NOT EXISTS uq_garment_product_services_live_pair
       ON garment_product_services (tenant_id, product_id, service_id)
       WHERE is_deleted = false
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS company_minute_rates (
+        id uuid PRIMARY KEY,
+        tenant_id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        value_per_minute numeric(18, 2) NOT NULL,
+        status varchar(30) NOT NULL DEFAULT 'active',
+        is_deleted boolean NOT NULL DEFAULT false,
+        deleted_at timestamptz,
+        deleted_by uuid,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        created_by uuid NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        updated_by uuid NOT NULL,
+        row_version bigint NOT NULL DEFAULT 1
+      )
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_company_minute_rates_live_active
+      ON company_minute_rates (tenant_id, company_id)
+      WHERE is_deleted = false AND status = 'active'
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS payment_provider_configs (
+        id uuid PRIMARY KEY,
+        tenant_id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        provider varchar(30) NOT NULL,
+        environment varchar(20) NOT NULL DEFAULT 'sandbox',
+        credentials jsonb NOT NULL DEFAULT '{}',
+        status varchar(30) NOT NULL DEFAULT 'active',
+        is_deleted boolean NOT NULL DEFAULT false,
+        deleted_at timestamptz,
+        deleted_by uuid,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        created_by uuid NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        updated_by uuid NOT NULL,
+        row_version bigint NOT NULL DEFAULT 1
+      )
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_provider_configs_live_active
+      ON payment_provider_configs (tenant_id, company_id, provider)
+      WHERE is_deleted = false AND status = 'active'
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS payment_terminals (
+        id uuid PRIMARY KEY,
+        tenant_id uuid NOT NULL,
+        branch_id uuid NOT NULL,
+        provider varchar(30) NOT NULL,
+        name varchar(120) NOT NULL,
+        terminal_code varchar(80) NOT NULL,
+        is_default boolean NOT NULL DEFAULT false,
+        status varchar(30) NOT NULL DEFAULT 'active',
+        is_deleted boolean NOT NULL DEFAULT false,
+        deleted_at timestamptz,
+        deleted_by uuid,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        created_by uuid NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        updated_by uuid NOT NULL,
+        row_version bigint NOT NULL DEFAULT 1
+      )
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_terminals_live_default
+      ON payment_terminals (tenant_id, branch_id)
+      WHERE is_deleted = false AND is_default = true
+    `);
+    await client.query(`
+      ALTER TABLE IF EXISTS payment_records
+      DROP CONSTRAINT IF EXISTS chk_payment_records_status
+    `);
+    await client.query(`
+      ALTER TABLE IF EXISTS payment_records
+      ADD CONSTRAINT chk_payment_records_status
+      CHECK (status IN ('authorized', 'received', 'settled', 'reversed', 'failed', 'pending', 'canceled'))
+    `);
+    await client.query(`
+      ALTER TABLE IF EXISTS payment_records
+      ADD COLUMN IF NOT EXISTS card_brand varchar(30)
+    `);
+    await client.query(`
+      ALTER TABLE IF EXISTS payment_records
+      ADD COLUMN IF NOT EXISTS installments integer
+    `);
+    await client.query(`
+      ALTER TABLE IF EXISTS payment_records
+      ADD COLUMN IF NOT EXISTS nsu varchar(40)
+    `);
+    await client.query(`
+      ALTER TABLE IF EXISTS payment_records
+      ADD COLUMN IF NOT EXISTS authorization_code varchar(60)
+    `);
+    await client.query(`
+      ALTER TABLE IF EXISTS payment_records
+      ADD COLUMN IF NOT EXISTS acquirer_transaction_id varchar(80)
     `);
     await client.query(`
       ALTER TABLE IF EXISTS service_orders

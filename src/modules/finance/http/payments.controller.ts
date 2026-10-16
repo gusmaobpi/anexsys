@@ -7,6 +7,7 @@ import { PlatformRequest } from 'src/platform/http/request-context';
 import { CurrentRequest, CurrentTenantId } from 'src/platform/http/request-context.decorators';
 import { PaymentDirection, PaymentMethod, PaymentProviderName, PaymentRecordStatus } from 'src/shared/domain/enums';
 import { FinanceService } from '../application/finance/finance.service';
+import { PaymentChargeService } from '../application/finance/payment-charge.service';
 import { SearchPaymentsDto } from '../contracts/dto/search-payments.dto';
 
 class PaymentAllocationBody {
@@ -76,6 +77,20 @@ class AddAllocationsBody {
   allocations!: PaymentAllocationBody[];
 }
 
+class ChargePaymentBody {
+  @IsUUID()
+  serviceOrderId!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount!: number;
+
+  @IsOptional()
+  @IsUUID()
+  terminalId?: string;
+}
+
 @Controller('payments')
 export class PaymentsController {
   constructor(
@@ -83,6 +98,8 @@ export class PaymentsController {
     private readonly financeService: FinanceService,
     @Inject(ServiceOrderService)
     private readonly serviceOrderService: ServiceOrderService,
+    @Inject(PaymentChargeService)
+    private readonly paymentChargeService: PaymentChargeService,
   ) {}
 
   @Permissions('finance.read')
@@ -122,6 +139,22 @@ export class PaymentsController {
     });
   }
 
+  @Permissions('finance.write')
+  @Post('charge')
+  async charge(@Body() body: ChargePaymentBody, @CurrentTenantId() tenantId: string | null, @CurrentRequest() request: PlatformRequest) {
+    const principal = request.requestContext.authenticatedPrincipal;
+    if (!tenantId || !principal) throw new UnauthorizedException('Authenticated tenant context is required.');
+    const serviceOrder = await this.serviceOrderService.getById(body.serviceOrderId, tenantId);
+    this.serviceOrderService.assertBranchAccess(serviceOrder, principal.effectiveBranchIds);
+    return this.paymentChargeService.initiateCharge({
+      tenantId,
+      actorUserId: principal.userId,
+      serviceOrderId: body.serviceOrderId,
+      amount: body.amount,
+      terminalId: body.terminalId,
+    });
+  }
+
   @Permissions('finance.read')
   @Get(':paymentId')
   async getById(@Param('paymentId', new ParseUUIDPipe()) paymentId: string, @CurrentTenantId() tenantId: string | null, @CurrentRequest() request: PlatformRequest) {
@@ -130,6 +163,26 @@ export class PaymentsController {
     const details = await this.financeService.getPaymentDetails(tenantId, paymentId);
     this.serviceOrderService.assertBranchAccess(details.serviceOrder, principal.effectiveBranchIds);
     return details;
+  }
+
+  @Permissions('finance.write')
+  @Post(':paymentId/refresh-status')
+  async refreshChargeStatus(@Param('paymentId', new ParseUUIDPipe()) paymentId: string, @CurrentTenantId() tenantId: string | null, @CurrentRequest() request: PlatformRequest) {
+    const principal = request.requestContext.authenticatedPrincipal;
+    if (!tenantId || !principal) throw new UnauthorizedException('Authenticated tenant context is required.');
+    const details = await this.financeService.getPaymentDetails(tenantId, paymentId);
+    this.serviceOrderService.assertBranchAccess(details.serviceOrder, principal.effectiveBranchIds);
+    return this.paymentChargeService.refreshCharge(tenantId, paymentId, principal.userId);
+  }
+
+  @Permissions('finance.write')
+  @Post(':paymentId/simulate-sandbox')
+  async simulateSandbox(@Param('paymentId', new ParseUUIDPipe()) paymentId: string, @CurrentTenantId() tenantId: string | null, @CurrentRequest() request: PlatformRequest) {
+    const principal = request.requestContext.authenticatedPrincipal;
+    if (!tenantId || !principal) throw new UnauthorizedException('Authenticated tenant context is required.');
+    const details = await this.financeService.getPaymentDetails(tenantId, paymentId);
+    this.serviceOrderService.assertBranchAccess(details.serviceOrder, principal.effectiveBranchIds);
+    return this.paymentChargeService.simulateCharge(tenantId, paymentId, principal.userId);
   }
 
   @Permissions('finance.write')

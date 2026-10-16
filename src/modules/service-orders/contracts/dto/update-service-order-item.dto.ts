@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { DeliveryType, ServiceOrderItemStatus } from 'src/shared/domain/enums';
 
 export class UpdateServiceOrderItemDto {
@@ -52,6 +52,12 @@ export class UpdateServiceOrderItemDto {
   @IsNumber()
   @Min(0)
   discountValue?: number | null;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  timeMinutes?: number | null;
 
   @IsOptional()
   @IsEnum(DeliveryType)

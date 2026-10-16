@@ -29,6 +29,17 @@ export function osPaymentMethodLabel(method: string | null | undefined) {
   return method || "Pagamento";
 }
 
+export function osPaymentRecordStatusLabel(status: string | null | undefined) {
+  if (status === "pending") return "Aguardando maquininha";
+  if (status === "authorized") return "Autorizado";
+  if (status === "received") return "Recebido";
+  if (status === "settled") return "Liquidado";
+  if (status === "failed") return "Falhou";
+  if (status === "canceled") return "Cancelado";
+  if (status === "reversed") return "Estornado";
+  return status || "";
+}
+
 export function osHasOutstandingBalance(summary?: Pick<OsFinancialSummary, "outstandingBalance"> | null) {
   return Number(summary?.outstandingBalance ?? 0) > 0;
 }

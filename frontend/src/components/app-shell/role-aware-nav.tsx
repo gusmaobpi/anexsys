@@ -80,6 +80,12 @@ const navSections: NavSection[] = [
         hint: "Produto + serviço, preço e tempo",
         requiredPermissions: ["service_orders.read"],
       },
+      {
+        href: "/minute-rates",
+        label: "Valor por Minuto",
+        hint: "R$/min da empresa p/ precificar por tempo",
+        requiredPermissions: ["service_orders.read"],
+      },
     ],
   },
   {
@@ -109,6 +115,17 @@ const navSections: NavSection[] = [
         hint: "Perfis e permissões",
         requiredPermissions: ["users.read", "roles.read", "permissions.read"],
         permissionMatch: "all",
+      },
+    ],
+  },
+  {
+    title: "Configurações",
+    items: [
+      {
+        href: "/settings/payments",
+        label: "Pagamentos",
+        hint: "Operadoras e credenciais por empresa",
+        requiredPermissions: ["finance.read"],
       },
     ],
   },

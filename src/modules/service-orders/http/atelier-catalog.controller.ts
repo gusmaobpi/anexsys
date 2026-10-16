@@ -13,7 +13,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { DependencyValidationService } from 'src/modules/governance/application/dependency-validation.service';
 import { Permissions } from 'src/platform/auth/permissions.decorator';
 import { CurrentRequest, CurrentTenantId } from 'src/platform/http/request-context.decorators';
@@ -83,6 +83,28 @@ class PatchProductServiceBody {
   @IsInt()
   @Min(1)
   estimatedMinutes?: number;
+
+  @IsOptional()
+  @IsEnum(MeasurementCatalogStatus)
+  status?: MeasurementCatalogStatus;
+}
+
+class CreateMinuteRateBody {
+  @IsUUID()
+  companyId!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  valuePerMinute!: number;
+}
+
+class PatchMinuteRateBody {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  valuePerMinute?: number;
 
   @IsOptional()
   @IsEnum(MeasurementCatalogStatus)
@@ -329,5 +351,60 @@ export class ProductServicesController {
     const principal = requirePrincipal(tenantId, request);
     await this.atelierCatalogService.removeProductService(priceId, tenantId as string, principal.userId);
     return { id: priceId, deleted: true };
+  }
+}
+
+@Controller('minute-rates')
+export class MinuteRatesController {
+  constructor(
+    @Inject(AtelierCatalogService)
+    private readonly atelierCatalogService: AtelierCatalogService,
+  ) {}
+
+  @Permissions('service_orders.read')
+  @Get()
+  async list(
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+    @Query('companyId') companyId?: string,
+  ) {
+    requirePrincipal(tenantId, request);
+    if (!companyId) {
+      throw new BadRequestException('Informe a empresa para listar as tabelas de valor por minuto.');
+    }
+    return this.atelierCatalogService.listMinuteRates(tenantId as string, companyId);
+  }
+
+  @Permissions('service_orders.write')
+  @Post()
+  async create(
+    @Body() body: CreateMinuteRateBody,
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+  ) {
+    const principal = requirePrincipal(tenantId, request);
+    return this.atelierCatalogService.createMinuteRate({
+      tenantId: tenantId as string,
+      companyId: body.companyId,
+      valuePerMinute: body.valuePerMinute,
+      actorUserId: principal.userId,
+    });
+  }
+
+  @Permissions('service_orders.write')
+  @Patch(':rateId')
+  async update(
+    @Param('rateId', new ParseUUIDPipe()) rateId: string,
+    @Body() body: PatchMinuteRateBody,
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+  ) {
+    const principal = requirePrincipal(tenantId, request);
+    return this.atelierCatalogService.updateMinuteRate(rateId, {
+      tenantId: tenantId as string,
+      valuePerMinute: body.valuePerMinute,
+      status: body.status,
+      actorUserId: principal.userId,
+    });
   }
 }

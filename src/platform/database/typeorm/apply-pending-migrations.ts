@@ -15,6 +15,12 @@ import { ServiceOrderPublicToken1760000035000 } from './migrations/1760000035000
 import { ServiceOrderApproval1760000036000 } from './migrations/1760000036000-service-order-approval';
 import { GarmentProductServices1760000037000 } from './migrations/1760000037000-garment-product-services';
 import { OsProcessSuffixes1760000038000 } from './migrations/1760000038000-os-process-suffixes';
+import { ServiceOrderItemTimeMinutes1760000039000 } from './migrations/1760000039000-service-order-item-time-minutes';
+import { CompanyMinuteRates1760000040000 } from './migrations/1760000040000-company-minute-rates';
+import { PaymentProviderConfigs1760000041000 } from './migrations/1760000041000-payment-provider-configs';
+import { PaymentTerminals1760000042000 } from './migrations/1760000042000-payment-terminals';
+import { PaymentRecordPendingStatus1760000043000 } from './migrations/1760000043000-payment-record-pending-status';
+import { PaymentRecordCardFields1760000044000 } from './migrations/1760000044000-payment-record-card-fields';
 
 export async function applyPendingMigrations(dataSource: DataSource): Promise<void> {
   if (typeof dataSource.runMigrations === 'function') {
@@ -48,6 +54,12 @@ export async function ensureAtelierOsSchema(dataSource: DataSource): Promise<voi
     await new ServiceOrderApproval1760000036000().up(queryRunner);
     await new GarmentProductServices1760000037000().up(queryRunner);
     await new OsProcessSuffixes1760000038000().up(queryRunner);
+    await new ServiceOrderItemTimeMinutes1760000039000().up(queryRunner);
+    await new CompanyMinuteRates1760000040000().up(queryRunner);
+    await new PaymentProviderConfigs1760000041000().up(queryRunner);
+    await new PaymentTerminals1760000042000().up(queryRunner);
+    await new PaymentRecordPendingStatus1760000043000().up(queryRunner);
+    await new PaymentRecordCardFields1760000044000().up(queryRunner);
   } finally {
     await queryRunner.release();
   }

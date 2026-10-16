@@ -7,6 +7,7 @@ import {
   calculateServiceOrderItemSubtotal,
   canAddServiceOrderItemGridRow,
   applyOsMoneyTyping,
+  applyTimePricingToUnitPrice,
   formatOsMoneyInput,
   mapServiceOrderItemsToGridRows,
   MAX_SERVICE_ORDER_ITEMS,
@@ -42,7 +43,7 @@ test('maps persisted items into visible editable grid rows', () => {
       quantity: '1.0000',
       unitPrice: '25.00',
       discountValue: '0.00',
-      estimatedMinutes: 15,
+      timeMinutes: 15,
       status: 'open',
     },
     {
@@ -73,7 +74,7 @@ test('maps persisted items into visible editable grid rows', () => {
       quantity: '1',
       unitPrice: '25,00',
       discountValue: '0,00',
-      estimatedMinutes: '15',
+      timeMinutes: '15',
       status: 'open',
       isEditing: false,
       isNew: false,
@@ -96,7 +97,7 @@ test('builds create payload for all visible item rows', () => {
     quantity: '2',
     unitPrice: '80',
     discountValue: '10',
-    estimatedMinutes: '45',
+    timeMinutes: '45',
   });
 
   assert.deepEqual(buildCreateServiceOrderItemsPayload(updatedRows), [
@@ -112,7 +113,7 @@ test('builds create payload for all visible item rows', () => {
       quantity: 1,
       unitPrice: 80,
       discountValue: 10,
-      estimatedMinutes: 45,
+      timeMinutes: 45,
     },
   ]);
 });
@@ -158,6 +159,7 @@ test('creates update and remove plans for existing rows and create plan for new 
         quantity: 1,
         unitPrice: undefined,
         discountValue: undefined,
+        timeMinutes: null,
       },
     ],
     update: [
@@ -174,6 +176,7 @@ test('creates update and remove plans for existing rows and create plan for new 
         quantity: 1,
         unitPrice: 25,
         discountValue: 0,
+        timeMinutes: null,
       },
     ],
     remove: [],
@@ -338,6 +341,34 @@ test('types valor and desconto as Brazilian money with cents', () => {
   assert.equal(parseOsMoney('15.000,00'), 15000);
   assert.equal(parseOsMoney('15000.00'), 15000);
   assert.equal(parseOsMoney('25,00'), 25);
+});
+
+test('keeps the fixed combo price when no minute rate is active', () => {
+  assert.equal(
+    applyTimePricingToUnitPrice({ timeMinutes: '30', minuteRate: null, comboUnitPrice: '35,00' }),
+    '35,00',
+  );
+});
+
+test('time pricing prevails over the combo fixed price', () => {
+  assert.equal(
+    applyTimePricingToUnitPrice({ timeMinutes: '30', minuteRate: 2, comboUnitPrice: '35,00' }),
+    '60,00',
+  );
+});
+
+test('time pricing applies even without a registered combo price', () => {
+  assert.equal(
+    applyTimePricingToUnitPrice({ timeMinutes: '30', minuteRate: 2, comboUnitPrice: '' }),
+    '60,00',
+  );
+});
+
+test('clearing the time restores the combo original price', () => {
+  assert.equal(
+    applyTimePricingToUnitPrice({ timeMinutes: '', minuteRate: 2, comboUnitPrice: '35,00' }),
+    '35,00',
+  );
 });
 
 test('previews the next linked OS number from the current plate', () => {

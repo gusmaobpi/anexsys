@@ -51,6 +51,7 @@ describe('applyPendingMigrations', () => {
     assert.equal(executedQueries.some((sql) => sql.includes('ADD COLUMN IF NOT EXISTS actual_delivery_time')), true);
     assert.equal(executedQueries.some((sql) => sql.includes('ADD COLUMN IF NOT EXISTS bag_closed')), true);
     assert.equal(executedQueries.some((sql) => sql.includes('ADD COLUMN IF NOT EXISTS serial_no')), true);
+    assert.equal(executedQueries.some((sql) => sql.includes('ADD COLUMN IF NOT EXISTS time_minutes')), true);
     assert.equal(executedQueries.some((sql) => sql.includes('DROP CONSTRAINT IF EXISTS chk_service_orders_status')), true);
     assert.equal(
       executedQueries.some((sql) => sql.includes("'quality'") && sql.includes("'ready_for_pickup'")),
@@ -74,6 +75,30 @@ describe('applyPendingMigrations', () => {
     );
     assert.equal(
       executedQueries.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS garment_product_services')),
+      true,
+    );
+    assert.equal(
+      executedQueries.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS company_minute_rates')),
+      true,
+    );
+    assert.equal(
+      executedQueries.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS payment_provider_configs')),
+      true,
+    );
+    assert.equal(
+      executedQueries.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS payment_terminals')),
+      true,
+    );
+    assert.equal(
+      executedQueries.some((sql) => sql.includes('chk_payment_records_status') && sql.includes("'pending'")),
+      true,
+    );
+    assert.equal(
+      executedQueries.some((sql) => sql.includes('ADD COLUMN IF NOT EXISTS card_brand')),
+      true,
+    );
+    assert.equal(
+      executedQueries.some((sql) => sql.includes('chk_payment_records_status') && sql.includes("'canceled'")),
       true,
     );
     assert.equal(executedQueries.some((sql) => sql.includes('ADD COLUMN IF NOT EXISTS public_token')), true);

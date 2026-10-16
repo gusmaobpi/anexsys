@@ -40,6 +40,9 @@ export class ServiceOrderItemEntity extends SoftDeletableBusinessEntity {
   @Column({ name: 'serial_no', type: 'varchar', length: 120, default: '' })
   serialNo!: string;
 
+  @Column({ name: 'time_minutes', type: 'integer', nullable: true })
+  timeMinutes!: number | null;
+
   @Column({ name: 'quantity', type: 'numeric', precision: 18, scale: 4 })
   quantity!: string;
 

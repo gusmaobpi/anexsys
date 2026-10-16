@@ -10,6 +10,8 @@ function createService(
     assertGarmentProductCanDelete?: () => Promise<void>;
     assertAtelierServiceCanDelete?: () => Promise<void>;
     prices?: object;
+    minuteRates?: object;
+    company?: object;
   } = {},
 ) {
   return new AtelierCatalogService(
@@ -110,6 +112,30 @@ function createService(
         return null;
       },
       ...repos.prices,
+    } as never,
+    {
+      create(payload: Record<string, unknown>) {
+        return payload;
+      },
+      async save(payload: Record<string, unknown>) {
+        return payload;
+      },
+      async findById() {
+        return null;
+      },
+      async findListedByCompany() {
+        return [];
+      },
+      async findActiveByCompany() {
+        return [];
+      },
+      ...repos.minuteRates,
+    } as never,
+    {
+      async getById(id: string) {
+        return { id, legalName: 'Empresa Teste', tradeName: null };
+      },
+      ...repos.company,
     } as never,
   );
 }

@@ -202,7 +202,7 @@ export class FinanceService {
     const outstandingBalance = Math.max(orderTotal - amountPaid, 0);
     const effectivePayments = new Map(
       groupPayments
-        .filter((payment) => ![PaymentRecordStatus.FAILED, PaymentRecordStatus.REVERSED].includes(payment.status))
+        .filter((payment) => ![PaymentRecordStatus.FAILED, PaymentRecordStatus.REVERSED, PaymentRecordStatus.PENDING, PaymentRecordStatus.CANCELED].includes(payment.status))
         .map((payment) => [payment.id, payment] as const),
     );
     const itemAllocations = new Map<string, number>();
@@ -234,7 +234,7 @@ export class FinanceService {
         : ServiceOrderPaymentStatus.PENDING;
 
     const recordedPayments = groupPayments
-      .filter((payment) => ![PaymentRecordStatus.FAILED, PaymentRecordStatus.REVERSED].includes(payment.status))
+      .filter((payment) => ![PaymentRecordStatus.FAILED, PaymentRecordStatus.REVERSED, PaymentRecordStatus.PENDING, PaymentRecordStatus.CANCELED].includes(payment.status))
       .slice()
       .sort((left, right) => {
         const leftTime = new Date(left.receivedAt ?? left.createdAt).getTime();
@@ -408,7 +408,7 @@ export class FinanceService {
     const payments = await this.paymentRecordRepository.findByServiceOrder(payment.serviceOrderId);
     const effectivePayments = new Map(
       payments
-        .filter((candidate) => ![PaymentRecordStatus.FAILED, PaymentRecordStatus.REVERSED].includes(candidate.status))
+        .filter((candidate) => ![PaymentRecordStatus.FAILED, PaymentRecordStatus.REVERSED, PaymentRecordStatus.PENDING, PaymentRecordStatus.CANCELED].includes(candidate.status))
         .map((candidate) => [candidate.id, candidate] as const),
     );
     const serviceOrderAllocations = await this.partialPaymentRepository.findByServiceOrder(payment.serviceOrderId, manager);
@@ -500,7 +500,7 @@ export class FinanceService {
 
   private calculateNetPaid(payments: PaymentRecordEntity[]) {
     return payments.reduce((sum, payment) => {
-      if ([PaymentRecordStatus.FAILED, PaymentRecordStatus.REVERSED].includes(payment.status)) return sum;
+      if ([PaymentRecordStatus.FAILED, PaymentRecordStatus.REVERSED, PaymentRecordStatus.PENDING, PaymentRecordStatus.CANCELED].includes(payment.status)) return sum;
       const amount = this.toMoney(payment.paymentAmount);
       return sum + (payment.paymentDirection === PaymentDirection.OUTBOUND ? -amount : amount);
     }, 0);

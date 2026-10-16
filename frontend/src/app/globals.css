@@ -485,6 +485,13 @@ textarea {
   white-space: nowrap;
 }
 
+.credential-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .os-pay-panel {
   display: grid;
   gap: 14px;

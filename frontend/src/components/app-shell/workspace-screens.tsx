@@ -11,11 +11,14 @@ import { getWorkspaceBasePath } from "@/components/app-shell/workspace-manager-s
 import { WorkspacePaneProvider } from "@/components/app-shell/workspace-pane";
 import { CustomerWorkspace } from "@/components/customers/customer-workspace";
 import { AtelierCatalogWorkspace } from "@/components/catalog/atelier-catalog-workspace";
+import { MinuteRatesWorkspace } from "@/components/catalog/minute-rates-workspace";
 import { ProductPricesWorkspace } from "@/components/catalog/product-prices-workspace";
 import { MeasurementMasterDataWorkspace } from "@/components/measurements/measurement-master-data-workspace";
 import { PickBagWorkspace } from "@/components/production/pick-bag-workspace";
 import { QualityWorkspace } from "@/components/quality/quality-workspace";
 import { ServiceOrdersWorkspace } from "@/components/service-orders/service-orders-workspace";
+import { PaymentProvidersWorkspace } from "@/components/settings/payment-providers-workspace";
+import { PaymentTerminalsWorkspace } from "@/components/settings/payment-terminals-workspace";
 
 function AccessWorkspaceScreen() {
   useWorkspaceRegistration({ label: "Usuários e Acessos" });
@@ -42,6 +45,18 @@ function PricesWorkspaceScreen() {
   return <ProductPricesWorkspace />;
 }
 
+function MinuteRatesWorkspaceScreen() {
+  return <MinuteRatesWorkspace />;
+}
+
+function PaymentProvidersWorkspaceScreen() {
+  return <PaymentProvidersWorkspace />;
+}
+
+function PaymentTerminalsWorkspaceScreen() {
+  return <PaymentTerminalsWorkspace />;
+}
+
 const workspaceScreens: Record<string, ComponentType> = {
   "/dashboard": DashboardWorkspace,
   "/admin/tenants": CompaniesWorkspace,
@@ -54,6 +69,9 @@ const workspaceScreens: Record<string, ComponentType> = {
   "/products": ProductsWorkspaceScreen,
   "/services": ServicesWorkspaceScreen,
   "/prices": PricesWorkspaceScreen,
+  "/minute-rates": MinuteRatesWorkspaceScreen,
+  "/settings/payments": PaymentProvidersWorkspaceScreen,
+  "/settings/payments/terminals": PaymentTerminalsWorkspaceScreen,
   "/service-orders": ServiceOrdersWorkspace,
   "/pick-bag": PickBagWorkspace,
   "/quality": QualityWorkspace,

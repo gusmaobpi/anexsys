@@ -6,6 +6,10 @@ export interface PaymentProviderInitiationRequest {
   paymentMethod: PaymentMethod;
   amount: number;
   serviceOrderId: string;
+  credentials: Record<string, string>;
+  environment: string;
+  terminalCode?: string | null;
+  description?: string | null;
 }
 
 export interface PaymentProviderAuthorizationResult {
@@ -14,6 +18,12 @@ export interface PaymentProviderAuthorizationResult {
   authorized: boolean;
   authorizedAt?: string | null;
   failureReason?: string | null;
+  awaitingTerminal?: boolean;
+  cardBrand?: string | null;
+  installments?: number | null;
+  nsu?: string | null;
+  authorizationCode?: string | null;
+  acquirerTransactionId?: string | null;
 }
 
 export interface PaymentProviderSettlementResult {
@@ -22,10 +32,19 @@ export interface PaymentProviderSettlementResult {
   settled: boolean;
   settledAt?: string | null;
   receivedAmount?: number | null;
+  canceled?: boolean;
+  cardBrand?: string | null;
+  installments?: number | null;
+  nsu?: string | null;
+  authorizationCode?: string | null;
+  acquirerTransactionId?: string | null;
 }
 
 export interface PaymentProviderAdapter {
   readonly provider: PaymentProviderName;
   initiatePayment(request: PaymentProviderInitiationRequest): Promise<PaymentProviderAuthorizationResult>;
-  reconcileSettlement(referenceNo: string): Promise<PaymentProviderSettlementResult>;
+  reconcileSettlement(
+    referenceNo: string,
+    options?: { credentials?: Record<string, string>; environment?: string },
+  ): Promise<PaymentProviderSettlementResult>;
 }

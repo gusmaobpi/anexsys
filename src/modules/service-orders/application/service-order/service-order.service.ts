@@ -162,7 +162,7 @@ export class ServiceOrderService {
 
     const normalizedItems: Array<Awaited<ReturnType<ServiceOrderService['resolveCatalogFields']>>> = [];
     for (const item of dto.items) {
-      normalizedItems.push(await this.resolveCatalogFields(dto.tenantId, dto.actorUserId, this.normalizeItemInput(item)));
+      normalizedItems.push(await this.resolveCatalogFields(dto.tenantId, dto.actorUserId, this.normalizeItemInput(item), true));
     }
     const normalizedDiscountValue = dto.discountValue ?? 0;
     const normalizedSurchargeValue = dto.deliverySurchargeValue ?? 0;
@@ -231,6 +231,7 @@ export class ServiceOrderService {
           brand: item.brand,
           model: item.model,
           serialNo: item.serialNo,
+          timeMinutes: item.timeMinutes,
           quantity: this.formatQuantity(item.quantity),
           unitPrice: item.unitPrice === null ? null : this.formatMoney(item.unitPrice),
           discountValue: this.formatMoney(item.discountValue),
@@ -846,7 +847,7 @@ export class ServiceOrderService {
     const tenant = await this.tenantService.getById(dto.tenantId);
     this.assertItemCount(openItems.length + 1, tenant.maxPiecesPerBag ?? DEFAULT_MAX_PIECES_PER_BAG);
 
-    const item = await this.resolveCatalogFields(dto.tenantId, dto.actorUserId, this.normalizeItemInput(dto));
+    const item = await this.resolveCatalogFields(dto.tenantId, dto.actorUserId, this.normalizeItemInput(dto), true);
     let savedItem: ServiceOrderItemEntity | null = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -878,6 +879,7 @@ export class ServiceOrderService {
             brand: item.brand,
             model: item.model,
             serialNo: item.serialNo,
+            timeMinutes: item.timeMinutes,
             quantity: this.formatQuantity(item.quantity),
             unitPrice: item.unitPrice === null ? null : this.formatMoney(item.unitPrice),
             discountValue: this.formatMoney(item.discountValue),
@@ -954,6 +956,7 @@ export class ServiceOrderService {
       brand: (dto.brand === undefined ? item.brand : dto.brand).trim(),
       model: (dto.model === undefined ? item.model : dto.model).trim(),
       serialNo: (dto.serialNo === undefined ? item.serialNo : dto.serialNo).trim(),
+      timeMinutes: dto.timeMinutes === undefined ? item.timeMinutes : dto.timeMinutes,
     });
     item.itemType = catalog.itemType;
     item.productId = catalog.productId;
@@ -963,6 +966,7 @@ export class ServiceOrderService {
     item.brand = catalog.brand;
     item.model = catalog.model;
     item.serialNo = catalog.serialNo;
+    item.timeMinutes = catalog.timeMinutes;
     item.quantity = this.formatQuantity(catalog.quantity);
     item.unitPrice = catalog.unitPrice === null ? null : this.formatMoney(catalog.unitPrice);
     item.discountValue =
@@ -1910,6 +1914,7 @@ export class ServiceOrderService {
           brand: item.brand,
           model: item.model,
           serialNo: item.serialNo,
+          timeMinutes: item.timeMinutes,
           quantity: this.formatQuantity(1),
           unitPrice: input.charged ? item.unitPrice : null,
           discountValue: this.formatMoney(input.charged ? Number(item.discountValue ?? 0) : 0),
@@ -2039,7 +2044,7 @@ export class ServiceOrderService {
   private normalizeItemInput(
     item: Pick<
       CreateServiceOrderItemInputDto,
-      'itemType' | 'description' | 'quantity' | 'unitPrice' | 'discountValue' | 'deliveryType' | 'operationalPriority' | 'productId' | 'serviceId' | 'complement' | 'brand' | 'model' | 'serialNo'
+      'itemType' | 'description' | 'quantity' | 'unitPrice' | 'discountValue' | 'timeMinutes' | 'deliveryType' | 'operationalPriority' | 'productId' | 'serviceId' | 'complement' | 'brand' | 'model' | 'serialNo'
     >,
   ) {
     return {
@@ -2048,6 +2053,7 @@ export class ServiceOrderService {
       quantity: 1,
       unitPrice: item.unitPrice ?? null,
       discountValue: item.discountValue ?? 0,
+      timeMinutes: item.timeMinutes ?? null,
       deliveryType: item.deliveryType ?? null,
       operationalPriority: item.operationalPriority?.trim() || null,
       productId: item.productId ?? null,
@@ -2063,10 +2069,12 @@ export class ServiceOrderService {
     tenantId: string,
     actorUserId: string,
     item: ReturnType<ServiceOrderService['normalizeItemInput']>,
+    fillEstimatedMinutesFromCatalog = false,
   ) {
     let itemType = item.itemType;
     let description = item.description;
     let unitPrice = item.unitPrice;
+    let timeMinutes = item.timeMinutes;
     const productId = item.productId;
     const serviceId = item.serviceId;
 
@@ -2082,6 +2090,9 @@ export class ServiceOrderService {
       const priced = await this.atelierCatalogService.findActiveProductService(tenantId, productId, serviceId);
       if (priced && unitPrice === null) {
         unitPrice = Number(priced.suggestedPrice);
+      }
+      if (priced && fillEstimatedMinutesFromCatalog && timeMinutes === null) {
+        timeMinutes = priced.estimatedMinutes;
       }
       if (!priced && unitPrice === null) {
         throw new DomainValidationError('Cadastre o preço deste produto e serviço.');
@@ -2103,6 +2114,7 @@ export class ServiceOrderService {
       itemType,
       description,
       unitPrice,
+      timeMinutes,
       productId,
       serviceId,
     };

@@ -37,6 +37,21 @@ export class PaymentRecordEntity extends MutableBusinessEntity {
   @Column({ name: 'reconciled_at', type: 'timestamptz', nullable: true })
   reconciledAt!: Date | null;
 
+  @Column({ name: 'card_brand', type: 'varchar', length: 30, nullable: true })
+  cardBrand!: string | null;
+
+  @Column({ name: 'installments', type: 'integer', nullable: true })
+  installments!: number | null;
+
+  @Column({ name: 'nsu', type: 'varchar', length: 40, nullable: true })
+  nsu!: string | null;
+
+  @Column({ name: 'authorization_code', type: 'varchar', length: 60, nullable: true })
+  authorizationCode!: string | null;
+
+  @Column({ name: 'acquirer_transaction_id', type: 'varchar', length: 80, nullable: true })
+  acquirerTransactionId!: string | null;
+
   @Column({ name: 'status', type: 'varchar', length: 30 })
   status!: PaymentRecordStatus;
 }

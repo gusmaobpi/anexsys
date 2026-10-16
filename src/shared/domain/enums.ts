@@ -254,6 +254,8 @@ export enum PaymentRecordStatus {
   SETTLED = 'settled',
   REVERSED = 'reversed',
   FAILED = 'failed',
+  PENDING = 'pending',
+  CANCELED = 'canceled',
 }
 
 export enum ServiceOrderPaymentStatus {

@@ -3,6 +3,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -60,6 +61,12 @@ export class CreateServiceOrderItemInputDto {
   @IsNumber()
   @Min(0)
   discountValue?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  timeMinutes?: number | null;
 
   @IsOptional()
   @IsEnum(DeliveryType)

@@ -20,6 +20,7 @@ import {
   IsDateString,
   IsEnum,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -94,6 +95,12 @@ class CreateServiceOrderItemBody {
   @IsNumber()
   @Min(0)
   discountValue?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  timeMinutes?: number | null;
 
   @IsOptional()
   @IsEnum(DeliveryType)
@@ -387,6 +394,12 @@ class UpdateServiceOrderItemBody {
   @IsNumber()
   @Min(0)
   discountValue?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  timeMinutes?: number | null;
 
   @IsOptional()
   @IsEnum(DeliveryType)

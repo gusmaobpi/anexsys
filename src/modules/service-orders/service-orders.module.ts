@@ -13,12 +13,14 @@ import { ServiceOrderService } from './application/service-order/service-order.s
 import {
   AtelierServicesController,
   GarmentProductsController,
+  MinuteRatesController,
   ProductServicesController,
 } from './http/atelier-catalog.controller';
 import { PublicServiceOrdersController } from './http/public-service-orders.controller';
 import { ServiceOrdersController } from './http/service-orders.controller';
 import { AtelierServiceEntity } from './infrastructure/persistence/entities/atelier-service.entity';
 import { BusinessCalendarDayEntity } from './infrastructure/persistence/entities/business-calendar-day.entity';
+import { CompanyMinuteRateEntity } from './infrastructure/persistence/entities/company-minute-rate.entity';
 import { GarmentProductEntity } from './infrastructure/persistence/entities/garment-product.entity';
 import { GarmentProductServiceEntity } from './infrastructure/persistence/entities/garment-product-service.entity';
 import { ServiceOrderEntity } from './infrastructure/persistence/entities/service-order.entity';
@@ -28,6 +30,7 @@ import { ServiceOrderPickupEntity } from './infrastructure/persistence/entities/
 import { ServiceOrderProofNoteEntity } from './infrastructure/persistence/entities/service-order-proof-note.entity';
 import { AtelierServiceRepository } from './infrastructure/persistence/repositories/atelier-service.repository';
 import { BusinessCalendarDayRepository } from './infrastructure/persistence/repositories/business-calendar-day.repository';
+import { CompanyMinuteRateRepository } from './infrastructure/persistence/repositories/company-minute-rate.repository';
 import { GarmentProductRepository } from './infrastructure/persistence/repositories/garment-product.repository';
 import { GarmentProductServiceRepository } from './infrastructure/persistence/repositories/garment-product-service.repository';
 import { ServiceOrderItemRepository } from './infrastructure/persistence/repositories/service-order-item.repository';
@@ -41,6 +44,7 @@ import { ServiceOrderRepository } from './infrastructure/persistence/repositorie
     TypeOrmModule.forFeature([
       AtelierServiceEntity,
       BusinessCalendarDayEntity,
+      CompanyMinuteRateEntity,
       GarmentProductEntity,
       GarmentProductServiceEntity,
       ServiceOrderEntity,
@@ -63,6 +67,7 @@ import { ServiceOrderRepository } from './infrastructure/persistence/repositorie
     GarmentProductsController,
     AtelierServicesController,
     ProductServicesController,
+    MinuteRatesController,
   ],
   providers: [
     AtelierCatalogService,
@@ -70,6 +75,7 @@ import { ServiceOrderRepository } from './infrastructure/persistence/repositorie
     ServiceOrderService,
     AtelierServiceRepository,
     BusinessCalendarDayRepository,
+    CompanyMinuteRateRepository,
     GarmentProductRepository,
     GarmentProductServiceRepository,
     ServiceOrderRepository,

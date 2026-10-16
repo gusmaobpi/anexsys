@@ -34,6 +34,7 @@ import { OsProofNotesPanel } from "@/components/service-orders/os-proof-notes-pa
 import { OsAnexoButton } from "@/components/service-orders/os-anexo-button";
 import { OsProductPriceQuickCreate, formatSuggestedPrice } from "@/components/service-orders/os-product-price-quick-create";
 import type { ProductPriceRecord } from "@/components/catalog/product-price-list";
+import type { MinuteRateRecord } from "@/components/catalog/minute-rate-list";
 import { OsApprovalPanel } from "@/components/service-orders/os-approval-panel";
 import { OsAttachmentsPanel } from "@/components/service-orders/os-attachments-panel";
 import { approvalMethodLabel, canRecordOsApproval, formatOsInstant, type ApprovalSummary } from "@/components/service-orders/os-approval";
@@ -45,6 +46,7 @@ import { RowOverflowMenu, type RowMenuItem } from "@/components/ui/row-overflow-
 import {
   addServiceOrderItemGridRow,
   applyOsMoneyTyping,
+  applyTimePricingToUnitPrice,
   buildCreateServiceOrderItemsPayload,
   buildServiceOrderItemMutationPlan,
   calculateServiceOrderItemSubtotal,
@@ -292,8 +294,9 @@ export function ServiceOrdersWorkspace() {
   const [products, setProducts] = useState<CatalogLookupRecord[]>([]);
   const [services, setServices] = useState<CatalogLookupRecord[]>([]);
   const [productPrices, setProductPrices] = useState<ProductPriceRecord[]>([]);
+  const [minuteRateValue, setMinuteRateValue] = useState<number | null>(null);
   const [users, setUsers] = useState<ActorSummary[]>([]);
-  const [payTarget, setPayTarget] = useState<{ orderNo: string; summary: OsFinancialSummary } | null>(null);
+  const [payTarget, setPayTarget] = useState<{ orderNo: string; branchId: string | null; summary: OsFinancialSummary } | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<OsFinancialSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -638,27 +641,35 @@ export function ServiceOrdersWorkspace() {
   }, [apiJson, canReadUsers, session?.user]);
 
   const loadCatalogs = useCallback(async () => {
+    const activeEmpresaId = session?.activeEmpresaId ?? null;
     if (!canRead) {
       setProducts([]);
       setServices([]);
       setProductPrices([]);
+      setMinuteRateValue(null);
       return;
     }
     try {
-      const [productResponse, serviceResponse, priceResponse] = await Promise.all([
+      const [productResponse, serviceResponse, priceResponse, minuteRatesResponse] = await Promise.all([
         apiJson<CatalogLookupRecord[]>("/garment-products"),
         apiJson<CatalogLookupRecord[]>("/atelier-services"),
         apiJson<ProductPriceRecord[]>("/product-services"),
+        activeEmpresaId
+          ? apiJson<MinuteRateRecord[]>(`/minute-rates?companyId=${encodeURIComponent(activeEmpresaId)}`)
+          : Promise.resolve([]),
       ]);
       setProducts(productResponse);
       setServices(serviceResponse);
       setProductPrices(priceResponse);
+      const activeRate = minuteRatesResponse.find((rate) => rate.status === "active");
+      setMinuteRateValue(activeRate ? Number(activeRate.valuePerMinute) : null);
     } catch {
       setProducts([]);
       setServices([]);
       setProductPrices([]);
+      setMinuteRateValue(null);
     }
-  }, [apiJson, canRead]);
+  }, [apiJson, canRead, session?.activeEmpresaId]);
 
   const loadBagSettings = useCallback(async () => {
     if (!canRead) {
@@ -687,14 +698,14 @@ export function ServiceOrdersWorkspace() {
   }, [apiJson, canRead]);
 
   const openPay = useCallback(
-    async (order: Pick<ServiceOrderRecord, "id" | "orderNo">) => {
+    async (order: Pick<ServiceOrderRecord, "id" | "orderNo" | "branchId">) => {
       if (!canReadFinance && !canWriteFinance) {
         setMessage("O pagamento depende da permissão financeira.");
         return;
       }
       try {
         const summary = await apiJson<OsFinancialSummary>(`/service-orders/${order.id}/financial-summary`);
-        setPayTarget({ orderNo: order.orderNo, summary });
+        setPayTarget({ orderNo: order.orderNo, branchId: order.branchId ?? null, summary });
       } catch (error) {
         setMessage(formatWorkspaceMessage(error, "O resumo financeiro não pôde ser carregado."));
       }
@@ -1662,7 +1673,7 @@ export function ServiceOrdersWorkspace() {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           discountValue: item.discountValue,
-          estimatedMinutes: item.estimatedMinutes,
+          timeMinutes: item.timeMinutes,
         }),
       });
     }
@@ -2054,11 +2065,12 @@ export function ServiceOrdersWorkspace() {
           <div className="os-anexo-lightbox__card">
             <OsPayPanel
               orderNo={payTarget.orderNo}
+              branchId={payTarget.branchId}
               summary={payTarget.summary}
               onClose={() => setPayTarget(null)}
               onPaid={(summary) => {
                 const paid = Number(summary.outstandingBalance) <= 0;
-                setPayTarget(paid ? null : { orderNo: payTarget.orderNo, summary });
+                setPayTarget(paid ? null : { orderNo: payTarget.orderNo, branchId: payTarget.branchId, summary });
                 setPaymentSummary(summary);
                 setOrders((current) =>
                   current.map((order) =>
@@ -2537,9 +2549,9 @@ export function ServiceOrdersWorkspace() {
                                       ...(stillValid
                                         ? {
                                             unitPrice: suggestedPriceFor(nextProductId, row.serviceId),
-                                            estimatedMinutes: estimatedMinutesFor(nextProductId, row.serviceId),
+                                            timeMinutes: estimatedMinutesFor(nextProductId, row.serviceId),
                                           }
-                                        : { serviceId: "", description: "", unitPrice: "", estimatedMinutes: "" }),
+                                        : { serviceId: "", description: "", unitPrice: "", timeMinutes: "" }),
                                     });
                                   })
                                 }
@@ -2583,7 +2595,7 @@ export function ServiceOrdersWorkspace() {
                                       serviceId: option?.id ?? "",
                                       description: option?.label ?? "",
                                       unitPrice: option?.id ? suggestedPriceFor(row.productId, option.id) : "",
-                                      estimatedMinutes: option?.id ? estimatedMinutesFor(row.productId, option.id) : "",
+                                      timeMinutes: option?.id ? estimatedMinutesFor(row.productId, option.id) : "",
                                     }),
                                   );
                                 }}
@@ -2612,7 +2624,7 @@ export function ServiceOrdersWorkspace() {
                                                 serviceId: created.serviceId,
                                                 description: created.serviceName,
                                                 unitPrice: formatSuggestedPrice(created.suggestedPrice),
-                                                estimatedMinutes: String(created.estimatedMinutes),
+                                                timeMinutes: String(created.estimatedMinutes),
                                               }),
                                             );
                                             completeCreate({
@@ -2694,14 +2706,20 @@ export function ServiceOrdersWorkspace() {
                                 inputMode="numeric"
                                 placeholder="0"
                                 title="Tempo previsto em minutos"
-                                value={row.estimatedMinutes ?? ""}
-                                onChange={(event) =>
+                                value={row.timeMinutes ?? ""}
+                                onChange={(event) => {
+                                  const nextTime = event.target.value.replace(/\D/g, "").slice(0, 4);
                                   setItemRows((current) =>
                                     updateServiceOrderItemGridRow(current, row.localId, {
-                                      estimatedMinutes: event.target.value.replace(/\D/g, "").slice(0, 4),
+                                      timeMinutes: nextTime,
+                                      unitPrice: applyTimePricingToUnitPrice({
+                                        timeMinutes: nextTime,
+                                        minuteRate: minuteRateValue,
+                                        comboUnitPrice: suggestedPriceFor(row.productId, row.serviceId),
+                                      }),
                                     }),
-                                  )
-                                }
+                                  );
+                                }}
                               />
                             </td>
                             <td>
@@ -2921,11 +2939,12 @@ export function ServiceOrdersWorkspace() {
                 {selectedOrder && payTarget?.summary.serviceOrderId === selectedOrder.id ? (
                   <OsPayPanel
                     orderNo={selectedOrder.orderNo}
+                    branchId={selectedOrder.branchId ?? null}
                     summary={payTarget.summary}
                     onClose={() => setPayTarget(null)}
                     onPaid={(summary) => {
                       const paid = Number(summary.outstandingBalance) <= 0;
-                      setPayTarget(paid ? null : { orderNo: selectedOrder.orderNo, summary });
+                      setPayTarget(paid ? null : { orderNo: selectedOrder.orderNo, branchId: selectedOrder.branchId ?? null, summary });
                       setPaymentSummary(summary);
                       setMessage(paid ? "Pagamento registrado. A OS está quitada." : "Pagamento parcial registrado.");
                     }}

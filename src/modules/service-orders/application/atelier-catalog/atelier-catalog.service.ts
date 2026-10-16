@@ -1,15 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { AuditService } from 'src/modules/audit/application/audit/audit.service';
+import { CompanyService } from 'src/modules/company/application/company/company.service';
 import { DependencyValidationService } from 'src/modules/governance/application/dependency-validation.service';
 import { TenantService } from 'src/modules/tenant/application/tenant/tenant.service';
 import { MeasurementCatalogStatus } from 'src/shared/domain/enums';
 import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
 import { EntityNotFoundError } from 'src/shared/errors/entity-not-found.error';
 import { AtelierServiceEntity } from '../../infrastructure/persistence/entities/atelier-service.entity';
+import { CompanyMinuteRateEntity } from '../../infrastructure/persistence/entities/company-minute-rate.entity';
 import { GarmentProductEntity } from '../../infrastructure/persistence/entities/garment-product.entity';
 import { GarmentProductServiceEntity } from '../../infrastructure/persistence/entities/garment-product-service.entity';
 import { AtelierServiceRepository } from '../../infrastructure/persistence/repositories/atelier-service.repository';
+import { CompanyMinuteRateRepository } from '../../infrastructure/persistence/repositories/company-minute-rate.repository';
 import { GarmentProductRepository } from '../../infrastructure/persistence/repositories/garment-product.repository';
 import { GarmentProductServiceRepository } from '../../infrastructure/persistence/repositories/garment-product-service.repository';
 
@@ -22,6 +25,15 @@ export type ProductServicePriceView = {
   suggestedPrice: string;
   estimatedMinutes: number;
   status: MeasurementCatalogStatus;
+};
+
+export type MinuteRateView = {
+  id: string;
+  companyId: string;
+  companyName: string;
+  valuePerMinute: string;
+  status: MeasurementCatalogStatus;
+  createdAt: Date;
 };
 
 export const DEFAULT_GARMENT_PRODUCTS = [
@@ -58,6 +70,10 @@ export class AtelierCatalogService {
     private readonly dependencyValidationService: DependencyValidationService,
     @Inject(GarmentProductServiceRepository)
     private readonly productServiceRepository: GarmentProductServiceRepository,
+    @Inject(CompanyMinuteRateRepository)
+    private readonly minuteRateRepository: CompanyMinuteRateRepository,
+    @Inject(CompanyService)
+    private readonly companyService: CompanyService,
   ) {}
 
   async listProducts(tenantId: string, actorUserId: string) {
@@ -489,6 +505,136 @@ export class AtelierCatalogService {
       displayName,
       actorUserId: input.actorUserId,
     });
+  }
+
+  async listMinuteRates(tenantId: string, companyId: string): Promise<MinuteRateView[]> {
+    await this.tenantService.getById(tenantId);
+    const company = await this.companyService.getById(companyId, tenantId);
+    const rows = await this.minuteRateRepository.findListedByCompany(tenantId, company.id);
+    return rows.map((row) => this.toMinuteRateView(row, this.companyDisplayName(company)));
+  }
+
+  async getActiveMinuteRate(tenantId: string, companyId: string): Promise<CompanyMinuteRateEntity | null> {
+    const [active] = await this.minuteRateRepository.findActiveByCompany(tenantId, companyId);
+    return active ?? null;
+  }
+
+  async createMinuteRate(input: {
+    tenantId: string;
+    companyId: string;
+    valuePerMinute: number;
+    actorUserId: string;
+  }): Promise<MinuteRateView> {
+    await this.tenantService.getById(input.tenantId);
+    const company = await this.companyService.getById(input.companyId, input.tenantId);
+    const valuePerMinute = this.requireMinuteRateValue(input.valuePerMinute);
+    await this.inactivateActiveMinuteRates(input.tenantId, company.id, input.actorUserId);
+
+    const saved = await this.minuteRateRepository.save(
+      this.minuteRateRepository.create({
+        id: randomUUID(),
+        tenantId: input.tenantId,
+        companyId: company.id,
+        valuePerMinute,
+        status: MeasurementCatalogStatus.ACTIVE,
+        isDeleted: false,
+        deletedAt: null,
+        deletedBy: null,
+        createdBy: input.actorUserId,
+        updatedBy: input.actorUserId,
+      }),
+    );
+    await this.auditService.record({
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      entityType: 'company_minute_rate',
+      entityId: saved.id,
+      action: 'atelier.minute_rate.created',
+      eventType: 'service_order.write',
+      metadata: { companyId: company.id },
+    });
+    return this.toMinuteRateView(saved, this.companyDisplayName(company));
+  }
+
+  async updateMinuteRate(
+    id: string,
+    input: {
+      tenantId: string;
+      valuePerMinute?: number;
+      status?: MeasurementCatalogStatus;
+      actorUserId: string;
+    },
+  ): Promise<MinuteRateView> {
+    const entity = await this.getMinuteRate(input.tenantId, id);
+    const company = await this.companyService.getById(entity.companyId, input.tenantId);
+    if (input.valuePerMinute !== undefined) {
+      entity.valuePerMinute = this.requireMinuteRateValue(input.valuePerMinute);
+    }
+    if (input.status !== undefined && input.status !== entity.status) {
+      if (input.status === MeasurementCatalogStatus.ACTIVE) {
+        await this.inactivateActiveMinuteRates(input.tenantId, entity.companyId, input.actorUserId, entity.id);
+      }
+      entity.status = input.status;
+    }
+    entity.updatedBy = input.actorUserId;
+    const saved = await this.minuteRateRepository.save(entity);
+    await this.auditService.record({
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      entityType: 'company_minute_rate',
+      entityId: saved.id,
+      action: 'atelier.minute_rate.updated',
+      eventType: 'service_order.write',
+      metadata: { companyId: entity.companyId },
+    });
+    return this.toMinuteRateView(saved, this.companyDisplayName(company));
+  }
+
+  private async getMinuteRate(tenantId: string, id: string): Promise<CompanyMinuteRateEntity> {
+    const entity = await this.minuteRateRepository.findById(id);
+    if (!entity || entity.tenantId !== tenantId) {
+      throw new EntityNotFoundError(`Company minute rate '${id}' was not found.`);
+    }
+    return entity;
+  }
+
+  private async inactivateActiveMinuteRates(
+    tenantId: string,
+    companyId: string,
+    actorUserId: string,
+    exceptId?: string,
+  ): Promise<void> {
+    const activeRows = await this.minuteRateRepository.findActiveByCompany(tenantId, companyId);
+    for (const row of activeRows) {
+      if (row.id === exceptId) {
+        continue;
+      }
+      row.status = MeasurementCatalogStatus.INACTIVE;
+      row.updatedBy = actorUserId;
+      await this.minuteRateRepository.save(row);
+    }
+  }
+
+  private toMinuteRateView(row: CompanyMinuteRateEntity, companyName: string): MinuteRateView {
+    return {
+      id: row.id,
+      companyId: row.companyId,
+      companyName,
+      valuePerMinute: row.valuePerMinute,
+      status: row.status,
+      createdAt: row.createdAt,
+    };
+  }
+
+  private companyDisplayName(company: { legalName: string; tradeName: string | null }): string {
+    return company.tradeName?.trim() || company.legalName;
+  }
+
+  private requireMinuteRateValue(value: number) {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new DomainValidationError('Informe o valor por minuto.');
+    }
+    return value.toFixed(2);
   }
 
   private async toPriceViews(
