@@ -97,7 +97,7 @@ export function QualityWorkspace() {
       const response = await apiJson<QualityListRecord[]>("/quality-reviews");
       setRecords(response.filter((record) => belongsToQualityList(record)));
     } catch (error) {
-      setMessage(describeWorkspaceError(error));
+      setMessage(describeWorkspaceError(error, "As revisoes de qualidade nao puderam ser carregadas."));
     } finally {
       setLoading(false);
     }
@@ -110,7 +110,7 @@ export function QualityWorkspace() {
         const response = await apiJson<QualityReview>(`/quality-reviews/${serviceOrderId}`);
         setReview(response);
       } catch (error) {
-        setMessage(describeWorkspaceError(error));
+        setMessage(describeWorkspaceError(error, "A revisao de qualidade nao pode ser carregada."));
         setReview(null);
       } finally {
         setLoading(false);
@@ -229,7 +229,7 @@ export function QualityWorkspace() {
       }
       await loadList();
     } catch (error) {
-      setMessage(describeWorkspaceError(error));
+      setMessage(describeWorkspaceError(error, "A revisao nao pode ser concluida."));
     } finally {
       setSaving(false);
     }
@@ -246,7 +246,7 @@ export function QualityWorkspace() {
       setReview(next);
       setMessage(`Versão ${next.versionNo} pronta para revisar as peças que voltaram da refação.`);
     } catch (error) {
-      setMessage(describeWorkspaceError(error));
+      setMessage(describeWorkspaceError(error, "O retorno da refacao nao pode ser iniciado."));
     } finally {
       setSaving(false);
     }
@@ -340,7 +340,7 @@ export function QualityWorkspace() {
                     navigateWithinWorkspace("/quality");
                     return;
                   }
-                  closeWorkspace(currentTabId);
+                  if (currentTabId) closeWorkspace(currentTabId);
                 }}
                 type="button"
               >

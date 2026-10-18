@@ -62,7 +62,7 @@ export function PickBagWorkspace() {
       const response = await apiJson<PickBagRecord[]>("/service-orders");
       setRecords(response.filter((record) => pickBagAction(record) !== null));
     } catch (error) {
-      setMessage(describeWorkspaceError(error));
+      setMessage(describeWorkspaceError(error, "A lista de producao nao pode ser carregada."));
     } finally {
       setLoading(false);
     }

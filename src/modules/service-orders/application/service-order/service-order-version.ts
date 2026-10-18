@@ -86,7 +86,7 @@ export function nextProcessSuffix(
   const used = new Set(
     existingSuffixes
       .map((suffix) => suffix?.trim().toUpperCase())
-      .filter((suffix): suffix is string => Boolean(suffix) && new RegExp(`^${letter}\\d*$`, 'i').test(suffix)),
+      .filter((suffix): suffix is string => typeof suffix === 'string' && suffix.length > 0 && new RegExp(`^${letter}\d*$`, 'i').test(suffix)),
   );
 
   if (!used.has(letter)) {

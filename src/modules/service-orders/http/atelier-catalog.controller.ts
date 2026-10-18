@@ -239,7 +239,7 @@ export class AtelierServicesController {
   @Permissions('service_orders.write')
   @Post()
   async create(
-    @Body() body: CreateAtelierServiceBody,
+    @Body() body: CreateCatalogNameBody,
     @CurrentTenantId() tenantId: string | null,
     @CurrentRequest() request: PlatformRequest,
   ) {
@@ -259,7 +259,7 @@ export class AtelierServicesController {
   @Patch(':serviceId')
   async update(
     @Param('serviceId', new ParseUUIDPipe()) serviceId: string,
-    @Body() body: PatchAtelierServiceBody,
+    @Body() body: PatchCatalogNameBody,
     @CurrentTenantId() tenantId: string | null,
     @CurrentRequest() request: PlatformRequest,
   ) {

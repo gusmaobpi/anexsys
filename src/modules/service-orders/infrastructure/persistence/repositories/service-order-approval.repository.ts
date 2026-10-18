@@ -32,7 +32,7 @@ export class ServiceOrderApprovalRepository {
       where: { serviceOrderId, isDeleted: false },
       order: { createdAt: 'DESC', id: 'DESC' },
     });
-    return rows.find((row) => row.method === 'counter' || row.method === 'paper' || row.method === 'link') ?? null;
+    return rows.find((row) => row.method === 'counter' || row.method === 'paper' || row.method === 'release') ?? null;
   }
 
   async findIdsWithPhoto(serviceOrderIds: string[]): Promise<string[]> {

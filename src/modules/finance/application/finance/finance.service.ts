@@ -196,7 +196,7 @@ export class FinanceService {
         : payments;
     const orderTotal =
       members.length > 1
-        ? members.reduce((sum, member) => sum + this.toMoney(member.totalValue), 0)
+        ? members.reduce((sum, member) => sum + this.toMoney(member.totalValue ?? '0'), 0)
         : this.toMoney(details.serviceOrder.totalValue ?? this.calculateItemsTotal(details.items));
     const amountPaid = this.calculateNetPaid(groupPayments);
     const outstandingBalance = Math.max(orderTotal - amountPaid, 0);
