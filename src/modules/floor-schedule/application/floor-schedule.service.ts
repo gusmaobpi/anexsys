@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { AuditService } from 'src/modules/audit/application/audit/audit.service';
 import { IdentityService } from 'src/modules/identity/application/identity/identity.service';
 import { ProductionOrderService } from 'src/modules/production-orders/application/production-order/production-order.service';
+import { QualityService } from 'src/modules/quality/application/quality/quality.service';
 import { floorActionLabel, nextFloorAction } from 'src/modules/service-orders/application/service-order/service-order-floor';
 import { ServiceOrderService } from 'src/modules/service-orders/application/service-order/service-order.service';
 import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
@@ -17,6 +18,7 @@ import {
 } from './floor-schedule.rules';
 
 type CheckinRow = { id: string; branchId: string; purpose: 'production' | 'quality'; codeValue: string };
+type PublicAnchor = CheckinRow & { tenantId: string };
 type TechnicianRow = {
   id: string;
   userId: string;
@@ -48,6 +50,8 @@ export class FloorScheduleService {
     private readonly productionOrderService: ProductionOrderService,
     @Inject(AuditService)
     private readonly auditService: AuditService,
+    @Inject(QualityService)
+    private readonly qualityService: QualityService,
   ) {}
 
   async listCandidates(tenantId: string) {
@@ -404,6 +408,124 @@ export class FloorScheduleService {
     return this.resumeSession(tenantId, anchor, marked[0].userId, marked[0].id, actorUserId);
   }
 
+  async openPublicCheckin(code: string) {
+    const anchor = await this.findCodeByValue(code);
+    if (anchor.purpose === 'quality') {
+      const names = await this.dataSource.query(
+        `SELECT t.id, u.display_name AS "displayName"
+         FROM floor_technicians t
+         JOIN user_identities u ON u.id = t.user_id
+         WHERE t.tenant_id = $1 AND t.status = 'active' AND t.profile_code = 'qualidade'
+           AND u.status = 'active' AND u.is_deleted = false
+         ORDER BY u.display_name ASC`,
+        [anchor.tenantId],
+      );
+      return { purpose: 'quality' as const, names: names as Array<{ id: string; displayName: string }> };
+    }
+    const names = await this.dataSource.query(
+      `SELECT t.id, u.display_name AS "displayName"
+       FROM floor_schedule_days d
+       JOIN floor_technicians t ON t.id = d.technician_id AND t.status = 'active'
+       JOIN user_identities u ON u.id = t.user_id
+       WHERE d.tenant_id = $1 AND d.branch_id = $2 AND d.work_date = $3
+       ORDER BY u.display_name ASC`,
+      [anchor.tenantId, anchor.branchId, saoPauloToday()],
+    );
+    return { purpose: 'production' as const, names: names as Array<{ id: string; displayName: string }> };
+  }
+
+  async openPublicSession(code: string, technicianId: string) {
+    const anchor = await this.findCodeByValue(code);
+    if (!technicianId) {
+      throw new DomainValidationError('Escolha o seu nome.');
+    }
+    if (anchor.purpose === 'quality') {
+      const person = await this.dataSource.query(
+        `SELECT t.id, t.user_id AS "userId"
+         FROM floor_technicians t
+         JOIN user_identities u ON u.id = t.user_id
+         WHERE t.tenant_id = $1 AND t.id = $2 AND t.status = 'active' AND t.profile_code = 'qualidade'
+           AND u.status = 'active' AND u.is_deleted = false`,
+        [anchor.tenantId, technicianId],
+      );
+      if (!person[0]) {
+        throw new DomainValidationError('Este nome não revisa a qualidade.');
+      }
+      return this.resumeSession(anchor.tenantId, anchor, person[0].userId, person[0].id, person[0].userId);
+    }
+    const marked = await this.dataSource.query(
+      `SELECT t.id, t.user_id AS "userId"
+       FROM floor_schedule_days d
+       JOIN floor_technicians t ON t.id = d.technician_id AND t.status = 'active'
+       WHERE d.tenant_id = $1 AND d.branch_id = $2 AND d.work_date = $3 AND t.id = $4`,
+      [anchor.tenantId, anchor.branchId, saoPauloToday(), technicianId],
+    );
+    if (!marked[0]) {
+      throw new DomainValidationError('Este nome não está confirmado na escala de hoje.');
+    }
+    return this.resumeSession(anchor.tenantId, anchor, marked[0].userId, marked[0].id, marked[0].userId);
+  }
+
+  async closePublicSession(code: string, sessionId: string) {
+    const { anchor, session } = await this.bindPublic(code, sessionId);
+    return this.closeSession(anchor.tenantId, session.id, session.userId);
+  }
+
+  async readPublicOrder(code: string, sessionId: string, codeValue: string) {
+    const { anchor, session } = await this.bindPublic(code, sessionId);
+    if (session.status !== 'active') {
+      throw new DomainValidationError('A sessão está encerrada.');
+    }
+    const read = await this.readOrder(anchor.tenantId, session.id, codeValue, [anchor.branchId]);
+    if (read.purpose !== 'quality') {
+      return { ...read, review: null };
+    }
+    const review = await this.qualityService.getReview(anchor.tenantId, read.serviceOrderId, [anchor.branchId]);
+    return { ...read, actionLabel: null, review };
+  }
+
+  async advancePublic(code: string, sessionId: string, serviceOrderId: string) {
+    const { anchor } = await this.bindPublic(code, sessionId);
+    const order = await this.serviceOrderService.getById(serviceOrderId, anchor.tenantId);
+    if (order.branchId !== anchor.branchId) {
+      throw new DomainValidationError('Esta OP é de outra filial.');
+    }
+    return this.advance(anchor.tenantId, sessionId, serviceOrderId);
+  }
+
+  async decidePublic(
+    code: string,
+    sessionId: string,
+    serviceOrderId: string,
+    serviceOrderItemId: string,
+    decision: 'approved' | 'rejected',
+    reason?: string | null,
+  ) {
+    const { anchor, session } = await this.requireQualitySession(code, sessionId);
+    const order = await this.serviceOrderService.getById(serviceOrderId, anchor.tenantId);
+    if (order.branchId !== anchor.branchId) {
+      throw new DomainValidationError('Esta OP é de outra filial.');
+    }
+    return this.qualityService.decideItem(
+      anchor.tenantId,
+      serviceOrderId,
+      serviceOrderItemId,
+      session.userId,
+      [anchor.branchId],
+      decision,
+      reason,
+    );
+  }
+
+  async startPublicReturn(code: string, sessionId: string, serviceOrderId: string) {
+    const { anchor, session } = await this.requireQualitySession(code, sessionId);
+    const order = await this.serviceOrderService.getById(serviceOrderId, anchor.tenantId);
+    if (order.branchId !== anchor.branchId) {
+      throw new DomainValidationError('Esta OP é de outra filial.');
+    }
+    return this.qualityService.startReturn(anchor.tenantId, serviceOrderId, session.userId, [anchor.branchId]);
+  }
+
   async closeSession(tenantId: string, sessionId: string, actorUserId: string) {
     const session = await this.requireSession(tenantId, sessionId);
     await this.dataSource.query(
@@ -550,6 +672,36 @@ export class FloorScheduleService {
     if (!accessibleBranchIds.includes(anchor.branchId)) {
       throw new DomainValidationError('Este QR é de outra filial.');
     }
+  }
+
+  private async requireQualitySession(code: string, sessionId: string) {
+    const bound = await this.bindPublic(code, sessionId);
+    if (bound.session.purpose !== 'quality' || bound.session.status !== 'active') {
+      throw new DomainValidationError('A qualidade revisa nesta sessão.');
+    }
+    return bound;
+  }
+
+  private async bindPublic(code: string, sessionId: string) {
+    const anchor = await this.findCodeByValue(code);
+    const session = await this.requireSession(anchor.tenantId, sessionId);
+    if (session.branchId !== anchor.branchId || session.purpose !== anchor.purpose) {
+      throw new DomainValidationError('Sessão não encontrada.');
+    }
+    return { anchor, session };
+  }
+
+  private async findCodeByValue(code: string): Promise<PublicAnchor> {
+    const rows = await this.dataSource.query(
+      `SELECT id, tenant_id AS "tenantId", branch_id AS "branchId", purpose, code_value AS "codeValue"
+       FROM floor_checkin_codes
+       WHERE code_value = $1`,
+      [code.trim()],
+    );
+    if (!rows[0]) {
+      throw new DomainValidationError('QR de check-in não encontrado.');
+    }
+    return rows[0] as PublicAnchor;
   }
 
   private async findCode(tenantId: string, code: string): Promise<CheckinRow> {

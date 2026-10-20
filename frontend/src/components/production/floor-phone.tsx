@@ -2,8 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { useSession } from "@/components/providers/session-provider";
 import { describeWorkspaceError } from "@/components/ui/workspace-flash";
+
+async function publicFloor<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`/backend-api/public/floor${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json().catch(() => null)) as { message?: string | string[] } | null;
+  if (!response.ok) {
+    const message = Array.isArray(payload?.message) ? payload.message[0] : payload?.message;
+    throw new Error(message || "O check-in não abriu.");
+  }
+  return payload as T;
+}
 
 type NameOption = { id: string; displayName: string };
 type CardItem = {
@@ -55,7 +68,6 @@ function formatDay(value: string) {
 export function FloorPhone() {
   const params = useParams<{ code: string }>();
   const code = String(params.code ?? "");
-  const { apiJson } = useSession();
   const [names, setNames] = useState<NameOption[]>([]);
   const [purpose, setPurpose] = useState<"production" | "quality" | null>(null);
   const [session, setSession] = useState<SessionState | null>(null);
@@ -69,23 +81,13 @@ export function FloorPhone() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    void apiJson<{ purpose: "production" | "quality"; names: NameOption[] }>("/floor-schedule/checkin", {
-      method: "POST",
-      body: JSON.stringify({ code }),
-    })
+    void publicFloor<{ purpose: "production" | "quality"; names: NameOption[] }>("/checkin", { code })
       .then((response) => {
         setPurpose(response.purpose);
         setNames(response.names);
-        if (response.purpose === "quality") {
-          return apiJson<SessionState>("/floor-schedule/sessions", {
-            method: "POST",
-            body: JSON.stringify({ code }),
-          }).then(setSession);
-        }
-        return undefined;
       })
       .catch((reason) => setError(describeWorkspaceError(reason, "O check-in não abriu.")));
-  }, [apiJson, code]);
+  }, [code]);
 
   const readCode = useCallback(async (codeValue: string) => {
     if (!session) return;
@@ -93,26 +95,24 @@ export function FloorPhone() {
     setError(null);
     setScanning(false);
     try {
-      const response = await apiJson<{
+      const response = await publicFloor<{
         purpose: "production" | "quality";
         serviceOrderId: string;
         card: Card;
         actionLabel: string | null;
-      }>(`/floor-schedule/sessions/${session.id}/read`, {
-        method: "POST",
-        body: JSON.stringify({ codeValue }),
-      });
+        review: QualityReview | null;
+      }>(`/sessions/${session.id}/read`, { code, codeValue });
       setCard(response.card);
       setActionLabel(response.actionLabel);
       if (response.purpose === "quality") {
-        setReview(await apiJson<QualityReview>(`/quality-reviews/${response.serviceOrderId}`));
+        setReview(response.review);
       }
     } catch (reason) {
       setError(describeWorkspaceError(reason, "Esta OP não abriu."));
     } finally {
       setBusy(false);
     }
-  }, [apiJson, session]);
+  }, [code, session]);
 
   useEffect(() => {
     if (!scanning) return undefined;
@@ -152,10 +152,7 @@ export function FloorPhone() {
     setBusy(true);
     setError(null);
     try {
-      setSession(await apiJson<SessionState>("/floor-schedule/sessions", {
-        method: "POST",
-        body: JSON.stringify({ code, technicianId }),
-      }));
+      setSession(await publicFloor<SessionState>("/sessions", { code, technicianId }));
     } catch (reason) {
       setError(describeWorkspaceError(reason, "O nome não entrou na sessão."));
     } finally {
@@ -168,12 +165,9 @@ export function FloorPhone() {
     setBusy(true);
     setError(null);
     try {
-      const response = await apiJson<{ openCamera: boolean; order: { id: string; orderNo: string; status: string } }>(
-        `/floor-schedule/sessions/${session.id}/advance`,
-        {
-          method: "POST",
-          body: JSON.stringify({ serviceOrderId }),
-        },
+      const response = await publicFloor<{ openCamera: boolean; order: { id: string; orderNo: string; status: string } }>(
+        `/sessions/${session.id}/advance`,
+        { code, serviceOrderId },
       );
       setCard(null);
       setReview(null);
@@ -189,15 +183,17 @@ export function FloorPhone() {
   }
 
   async function decide(itemId: string, decision: "approved" | "rejected") {
-    if (!review) return;
+    if (!review || !session) return;
     const reason = decision === "rejected" ? window.prompt("Motivo da reprovação") ?? "" : undefined;
     if (decision === "rejected" && !reason?.trim()) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await apiJson<{ review: QualityReview }>(`/quality-reviews/${review.serviceOrder.id}/items/${itemId}`, {
-        method: "POST",
-        body: JSON.stringify({ decision, reason }),
+      const result = await publicFloor<{ review: QualityReview }>(`/sessions/${session.id}/items/${itemId}`, {
+        code,
+        serviceOrderId: review.serviceOrder.id,
+        decision,
+        reason,
       });
       setReview(result.review);
       if ((result.review.phase === "ready" || result.review.phase === "rework_issued") && session?.status === "active") {
@@ -217,7 +213,10 @@ export function FloorPhone() {
     setBusy(true);
     setError(null);
     try {
-      setReview(await apiJson<QualityReview>(`/quality-reviews/${review.serviceOrder.id}/start-return`, { method: "POST" }));
+      setReview(await publicFloor<QualityReview>(`/sessions/${session.id}/start-return`, {
+        code,
+        serviceOrderId: review.serviceOrder.id,
+      }));
     } catch (reason) {
       setError(describeWorkspaceError(reason, "O retorno da refação não abriu."));
     } finally {
@@ -227,7 +226,7 @@ export function FloorPhone() {
 
   async function closeSession() {
     if (!session) return;
-    await apiJson(`/floor-schedule/sessions/${session.id}/close`, { method: "POST" });
+    await publicFloor(`/sessions/${session.id}/close`, { code });
     setSession({ ...session, status: "closed" });
     setScanning(false);
   }
@@ -237,16 +236,19 @@ export function FloorPhone() {
   return (
     <section className="floor-phone__panel">
       <p className="eyebrow">ANEXSYS</p>
-      <h1>{purpose === "quality" ? "Check-in da qualidade" : "Check-in da produção"}</h1>
+      <h1>{purpose === "quality" ? "Check-in da qualidade" : purpose === "production" ? "Check-in da produção" : "Check-in"}</h1>
       {error ? <p className="error-text">{error}</p> : null}
-      {!session && purpose === "production" ? (
+      {!purpose && !error ? <p>Abrindo o check-in…</p> : null}
+      {!session && purpose ? (
         <div className="button-row">
           {names.map((person) => (
             <button className="button" disabled={busy} key={person.id} onClick={() => void chooseName(person.id)} type="button">
               {person.displayName}
             </button>
           ))}
-          {names.length === 0 ? <p>Ninguém confirmado na escala de hoje.</p> : null}
+          {names.length === 0 ? (
+            <p>{purpose === "quality" ? "Ninguém da qualidade cadastrado." : "Ninguém confirmado na escala de hoje."}</p>
+          ) : null}
         </div>
       ) : null}
       {session && !card && !review && !scanning ? (

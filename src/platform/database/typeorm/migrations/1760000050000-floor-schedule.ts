@@ -99,14 +99,121 @@ export class FloorSchedule1760000050000 implements MigrationInterface {
         )
     `);
     await queryRunner.query(`
+      INSERT INTO permissions (id, tenant_id, code, display_name, description, created_by, updated_by)
+      SELECT gen_random_uuid(), sample.tenant_id, needed.code, needed.code, needed.code, sample.created_by, sample.created_by
+      FROM (
+        SELECT DISTINCT ON (tenant_id) tenant_id, created_by
+        FROM permissions
+        ORDER BY tenant_id, created_at
+      ) sample
+      CROSS JOIN (
+        VALUES
+          ('branches.read'), ('branches.write'),
+          ('companies.read'), ('companies.write'),
+          ('customers.read'), ('customers.write'),
+          ('finance.read'), ('finance.write'),
+          ('floor_schedule.write'),
+          ('measurements.read'), ('measurements.write'),
+          ('permissions.read'),
+          ('production_orders.read'), ('production_orders.write'),
+          ('quality.read'), ('quality.write'),
+          ('rework.read'), ('rework.write'),
+          ('roles.read'), ('roles.write'),
+          ('service_orders.read'), ('service_orders.write'),
+          ('tenants.read'), ('tenants.write'),
+          ('users.read'), ('users.write')
+      ) AS needed(code)
+      WHERE NOT EXISTS (
+        SELECT 1 FROM permissions existing
+        WHERE existing.tenant_id = sample.tenant_id AND existing.code = needed.code
+      )
+    `);
+    await queryRunner.query(`
+      INSERT INTO roles (id, tenant_id, code, display_name, description, status, is_system_managed, created_by, updated_by)
+      SELECT gen_random_uuid(), sample.tenant_id, needed.code, needed.display_name, needed.description, 'active', true, sample.created_by, sample.created_by
+      FROM (
+        SELECT DISTINCT ON (tenant_id) tenant_id, created_by
+        FROM permissions
+        ORDER BY tenant_id, created_at
+      ) sample
+      CROSS JOIN (
+        VALUES
+          ('RECEPCAO', 'Recepção', 'Recebe o cliente e consulta OS.'),
+          ('ATENDENTE', 'Atendente / medidor', 'Abre OS, cadastra cliente e registra medidas.'),
+          ('PRODUCAO', 'Produção', 'Executa a Ordem de Produção.'),
+          ('QUALIDADE', 'Qualidade', 'Revisa e reprova peças.'),
+          ('GERENTE', 'Gerente', 'Administra a Conta, Empresas, Filiais e usuários.')
+      ) AS needed(code, display_name, description)
+      WHERE NOT EXISTS (
+        SELECT 1 FROM roles existing
+        WHERE existing.tenant_id = sample.tenant_id AND upper(existing.code) = needed.code
+      )
+    `);
+    await queryRunner.query(`
       INSERT INTO role_permissions (id, tenant_id, role_id, permission_id, created_by, updated_by)
       SELECT gen_random_uuid(), r.tenant_id, r.id, p.id, r.created_by, r.created_by
       FROM roles r
       JOIN permissions p ON p.tenant_id = r.tenant_id AND p.code = 'floor_schedule.write'
-      WHERE upper(r.code) = 'GERENTE'
+      WHERE upper(r.code) IN ('GERENTE', 'MASTER_ADMINISTRATOR')
         AND NOT EXISTS (
           SELECT 1 FROM role_permissions rp WHERE rp.role_id = r.id AND rp.permission_id = p.id
         )
+    `);
+    await queryRunner.query(`
+      INSERT INTO role_permissions (id, tenant_id, role_id, permission_id, created_by, updated_by)
+      SELECT gen_random_uuid(), r.tenant_id, r.id, p.id, r.created_by, r.created_by
+      FROM roles r
+      JOIN permissions p ON p.tenant_id = r.tenant_id
+      JOIN (
+        VALUES
+          ('RECEPCAO', 'customers.read'),
+          ('RECEPCAO', 'service_orders.read'),
+          ('RECEPCAO', 'branches.read'),
+          ('ATENDENTE', 'customers.read'),
+          ('ATENDENTE', 'customers.write'),
+          ('ATENDENTE', 'measurements.read'),
+          ('ATENDENTE', 'measurements.write'),
+          ('ATENDENTE', 'service_orders.read'),
+          ('ATENDENTE', 'service_orders.write'),
+          ('ATENDENTE', 'branches.read'),
+          ('PRODUCAO', 'production_orders.read'),
+          ('PRODUCAO', 'production_orders.write'),
+          ('PRODUCAO', 'service_orders.read'),
+          ('QUALIDADE', 'quality.read'),
+          ('QUALIDADE', 'quality.write'),
+          ('QUALIDADE', 'rework.read'),
+          ('QUALIDADE', 'rework.write'),
+          ('QUALIDADE', 'production_orders.read'),
+          ('QUALIDADE', 'service_orders.read'),
+          ('GERENTE', 'tenants.read'),
+          ('GERENTE', 'tenants.write'),
+          ('GERENTE', 'companies.read'),
+          ('GERENTE', 'companies.write'),
+          ('GERENTE', 'branches.read'),
+          ('GERENTE', 'branches.write'),
+          ('GERENTE', 'users.read'),
+          ('GERENTE', 'users.write'),
+          ('GERENTE', 'roles.read'),
+          ('GERENTE', 'roles.write'),
+          ('GERENTE', 'permissions.read'),
+          ('GERENTE', 'customers.read'),
+          ('GERENTE', 'customers.write'),
+          ('GERENTE', 'measurements.read'),
+          ('GERENTE', 'measurements.write'),
+          ('GERENTE', 'service_orders.read'),
+          ('GERENTE', 'service_orders.write'),
+          ('GERENTE', 'production_orders.read'),
+          ('GERENTE', 'production_orders.write'),
+          ('GERENTE', 'quality.read'),
+          ('GERENTE', 'quality.write'),
+          ('GERENTE', 'floor_schedule.write'),
+          ('GERENTE', 'finance.read'),
+          ('GERENTE', 'finance.write')
+      ) AS needed(role_code, permission_code)
+        ON upper(r.code) = needed.role_code AND p.code = needed.permission_code
+      WHERE NOT EXISTS (
+        SELECT 1 FROM role_permissions rp WHERE rp.role_id = r.id AND rp.permission_id = p.id
+      )
     `);
     await queryRunner.query(`
       INSERT INTO role_permissions (id, tenant_id, role_id, permission_id, created_by, updated_by)
