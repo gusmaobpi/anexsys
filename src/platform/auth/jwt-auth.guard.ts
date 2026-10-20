@@ -17,6 +17,26 @@ import {
 } from 'src/platform/http/request-context';
 import { TokenFactoryService } from './token-factory.service';
 import { IS_PUBLIC_KEY, isPublicExecutionContext } from './public.decorator';
+import type { EffectiveAccessResult } from 'src/modules/authorization/application/authorization/authorization.service';
+
+const accessInflight = new Map<string, Promise<EffectiveAccessResult>>();
+
+function cachedEffectiveAccess(
+  load: (tenantId: string, userId: string) => Promise<EffectiveAccessResult>,
+  tenantId: string,
+  userId: string,
+): Promise<EffectiveAccessResult> {
+  const key = `${tenantId}:${userId}`;
+  const hit = accessInflight.get(key);
+  if (hit) {
+    return hit;
+  }
+  const value = load(tenantId, userId).finally(() => {
+    accessInflight.delete(key);
+  });
+  accessInflight.set(key, value);
+  return value;
+}
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -58,7 +78,11 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('JWT access token is invalid.');
     }
 
-    const effectiveAccess = await this.authorizationService.getEffectiveAccessForUser(tokenTenantId, payload.sub);
+    const effectiveAccess = await cachedEffectiveAccess(
+      (tenantId, userId) => this.authorizationService.getEffectiveAccessForUser(tenantId, userId),
+      tokenTenantId,
+      payload.sub,
+    );
     const requestedTenantId = resolveTenantId(request);
     if (requestedTenantId && requestedTenantId !== tokenTenantId) {
       throw new ForbiddenException('Requested tenant is outside the authenticated tenant scope.');

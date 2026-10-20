@@ -638,6 +638,8 @@ export function ServiceOrdersWorkspace() {
     },
     [apiJson, canReadFinance, canWriteFinance, focusServiceOrderId, navigateWithinWorkspace, setHeaderForm, setItemRows, showCreateForm, workspaceMode],
   );
+  const loadDetailsRef = useRef(loadDetails);
+  loadDetailsRef.current = loadDetails;
 
   const loadOrders = useCallback(
     async (preferredActiveId?: string | null) => {
@@ -653,7 +655,7 @@ export function ServiceOrdersWorkspace() {
         if (binding.bind) {
           setActiveOrderId(binding.activeId);
           if (binding.activeId) {
-            await loadDetails(binding.activeId);
+            await loadDetailsRef.current(binding.activeId);
           } else {
             setDetails(null);
           }
@@ -672,7 +674,7 @@ export function ServiceOrdersWorkspace() {
         setLoading(false);
       }
     },
-    [apiJson, canRead, loadDetails, setActiveOrderId],
+    [apiJson, canRead, setActiveOrderId],
   );
 
   useEffect(() => {
@@ -1320,32 +1322,44 @@ export function ServiceOrdersWorkspace() {
   }, [isListWorkspace, loadOrders, session?.activeBranchId, session?.tenantId]);
 
   useEffect(() => {
+    if (isListWorkspace) {
+      return;
+    }
     const timeoutId = window.setTimeout(() => {
       void loadCustomers();
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [loadCustomers, session?.tenantId]);
+  }, [isListWorkspace, loadCustomers, session?.tenantId]);
 
   useEffect(() => {
+    if (isListWorkspace) {
+      return;
+    }
     const timeoutId = window.setTimeout(() => {
       void loadUsers();
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [loadUsers, session?.tenantId]);
+  }, [isListWorkspace, loadUsers, session?.tenantId]);
 
   useEffect(() => {
+    if (isListWorkspace) {
+      return;
+    }
     const timeoutId = window.setTimeout(() => {
       void loadCatalogs();
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [loadCatalogs, session?.tenantId]);
+  }, [isListWorkspace, loadCatalogs, session?.tenantId]);
 
   useEffect(() => {
+    if (isListWorkspace) {
+      return;
+    }
     const timeoutId = window.setTimeout(() => {
       void loadBagSettings();
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [loadBagSettings, session?.tenantId]);
+  }, [isListWorkspace, loadBagSettings, session?.tenantId]);
 
   useEffect(() => {
     if (!headerForm.attendantId && session?.user?.id) {

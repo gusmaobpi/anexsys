@@ -7,7 +7,7 @@ import { WorkGroupsWorkspace } from "@/components/admin/work-groups-workspace";
 import { CompaniesWorkspace } from "@/components/admin/companies-workspace";
 import { EmpresasWorkspace } from "@/components/admin/empresas-workspace";
 import { DashboardWorkspace } from "@/components/app-shell/dashboard-workspace";
-import { useWorkspaceManager, useWorkspaceRegistration } from "@/components/app-shell/workspace-manager";
+import { useWorkspaceManager } from "@/components/app-shell/workspace-manager";
 import { getWorkspaceBasePath } from "@/components/app-shell/workspace-manager-store";
 import { WorkspacePaneProvider } from "@/components/app-shell/workspace-pane";
 import { CustomerWorkspace } from "@/components/customers/customer-workspace";
@@ -25,7 +25,6 @@ import { PaymentProvidersWorkspace } from "@/components/settings/payment-provide
 import { PaymentTerminalsWorkspace } from "@/components/settings/payment-terminals-workspace";
 
 function AccessWorkspaceScreen() {
-  useWorkspaceRegistration({ label: "Usuários e Acessos" });
   return <AccessWorkspace />;
 }
 

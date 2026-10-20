@@ -242,6 +242,7 @@ export function AccessWorkspace() {
   const canReadPermissions = hasAnyPermission("permissions.read");
   const canWritePermissions = hasAnyPermission("permissions.write");
   const canReadCommunities = hasAnyPermission("communities.read");
+  const canReadBranches = hasAnyPermission("branches.read");
   const canWriteCommunities = false;
 
   const [branches, setBranches] = useState<BranchRecord[]>([]);
@@ -366,42 +367,37 @@ export function AccessWorkspace() {
                 : null,
   });
 
+  const loadedDomain: AccessTab = formDomain ?? listTab;
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
     try {
-      const [branchRecords, userRecords, roleRecords, permissionRecords, communityRecords] = await Promise.all([
-        hasAnyPermission("branches.read") ? apiJson<BranchRecord[]>("/branches") : Promise.resolve([]),
-        canReadUsers ? apiJson<UserRecord[]>("/users") : Promise.resolve([]),
-        canReadRoles ? apiJson<RoleRecord[]>("/roles") : Promise.resolve([]),
-        canReadPermissions ? apiJson<PermissionRecord[]>("/permissions") : Promise.resolve([]),
-        canReadCommunities ? apiJson<CommunityRecord[]>("/communities") : Promise.resolve([]),
-      ]);
-      const resolvedActiveUser = userRecords.find((record) => record.id === (focusUserId || activeUserId)) ?? null;
-      const resolvedActiveRole = roleRecords.find((record) => record.id === (focusRoleId || activeRoleId)) ?? null;
-      const resolvedActivePermission =
-        permissionRecords.find((record) => record.id === (focusPermissionId || activePermissionId)) ?? null;
-      const resolvedActiveCommunity =
-        communityRecords.find((record) => record.id === (focusCommunityId || activeCommunityId)) ?? null;
-      setBranches(branchRecords);
-      setUsers(userRecords);
-      setRoles(roleRecords);
-      setPermissions(permissionRecords);
-      setCommunities(communityRecords);
-      setActiveUserId(resolvedActiveUser?.id ?? null);
-      setActiveRoleId(resolvedActiveRole?.id ?? null);
-      setActivePermissionId(resolvedActivePermission?.id ?? null);
-      setActiveCommunityId(resolvedActiveCommunity?.id ?? null);
-      if (!showCreateUser && resolvedActiveUser) {
-        setUserForm(mapUserToForm(resolvedActiveUser));
-      }
-      if (!showCreateRole && resolvedActiveRole) {
-        setRoleForm(mapRoleToForm(resolvedActiveRole));
-      }
-      if (!showCreatePermission && resolvedActivePermission) {
-        setPermissionForm(mapPermissionToForm(resolvedActivePermission));
-      }
-      if (!showCreateCommunity && resolvedActiveCommunity) {
-        setCommunityForm(mapCommunityToForm(resolvedActiveCommunity));
+      if (loadedDomain === "users") {
+        const [branchRecords, userRecords, roleRecords, communityRecords] = await Promise.all([
+          canReadBranches ? apiJson<BranchRecord[]>("/branches") : Promise.resolve([]),
+          canReadUsers ? apiJson<UserRecord[]>("/users") : Promise.resolve([]),
+          formDomain === "users" && canReadRoles ? apiJson<RoleRecord[]>("/roles") : Promise.resolve(null),
+          formDomain === "users" && canReadCommunities ? apiJson<CommunityRecord[]>("/communities") : Promise.resolve(null),
+        ]);
+        setBranches(branchRecords);
+        setUsers(userRecords);
+        if (roleRecords) setRoles(roleRecords);
+        if (communityRecords) setCommunities(communityRecords);
+      } else if (loadedDomain === "roles") {
+        const [roleRecords, permissionRecords] = await Promise.all([
+          canReadRoles ? apiJson<RoleRecord[]>("/roles") : Promise.resolve([]),
+          formDomain === "roles" && canReadPermissions ? apiJson<PermissionRecord[]>("/permissions") : Promise.resolve(null),
+        ]);
+        setRoles(roleRecords);
+        if (permissionRecords) setPermissions(permissionRecords);
+      } else if (loadedDomain === "permissions") {
+        setPermissions(canReadPermissions ? await apiJson<PermissionRecord[]>("/permissions") : []);
+      } else {
+        const [communityRecords, permissionRecords] = await Promise.all([
+          canReadCommunities ? apiJson<CommunityRecord[]>("/communities") : Promise.resolve([]),
+          formDomain === "communities" && canReadPermissions ? apiJson<PermissionRecord[]>("/permissions") : Promise.resolve(null),
+        ]);
+        setCommunities(communityRecords);
+        if (permissionRecords) setPermissions(permissionRecords);
       }
       setMessage(null);
     } catch (error) {
@@ -409,30 +405,7 @@ export function AccessWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [
-    activeCommunityId,
-    activePermissionId,
-    activeRoleId,
-    activeUserId,
-    apiJson,
-    canReadCommunities,
-    canReadPermissions,
-    canReadRoles,
-    canReadUsers,
-    focusCommunityId,
-    focusPermissionId,
-    focusRoleId,
-    focusUserId,
-    hasAnyPermission,
-    setActiveCommunityId,
-    setActivePermissionId,
-    setActiveRoleId,
-    setActiveUserId,
-    showCreateCommunity,
-    showCreatePermission,
-    showCreateRole,
-    showCreateUser,
-  ]);
+  }, [apiJson, canReadBranches, canReadCommunities, canReadPermissions, canReadRoles, canReadUsers, formDomain, loadedDomain]);
 
   const loadUserSummary = useCallback(
     async (userId: string) => {
@@ -461,12 +434,13 @@ export function AccessWorkspace() {
   useCadastroListRefresh("/admin/access", isListWorkspace, loadWorkspace);
 
   useEffect(() => {
-    if (!activeUser || showCreateUser) return;
+    if (!isUserFormWorkspace || !activeUser || showCreateUser) return;
+    const userId = activeUser.id;
     const timeoutId = window.setTimeout(() => {
-      void loadUserSummary(activeUser.id);
+      void loadUserSummary(userId);
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [activeUser, loadUserSummary, showCreateUser]);
+  }, [activeUser, isUserFormWorkspace, loadUserSummary, showCreateUser]);
 
   const clearUserDuplicate = useCallback(() => {
     setUserDuplicateStatus("idle");

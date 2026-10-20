@@ -739,7 +739,10 @@ export function TopbarChipTray() {
 export function WorkspaceTabsBar() {
   const { currentTabId, tabs, activateWorkspace, closeWorkspace } = useWorkspaceManager();
   const tabListRef = useRef<HTMLDivElement | null>(null);
-  const workTabs = tabs.filter((tab) => !isHomeWorkspacePath(tab.pathname) && !isPinnedWorkspacePath(tab.pathname));
+  const workTabs = useMemo(
+    () => tabs.filter((tab) => !isHomeWorkspacePath(tab.pathname) && !isPinnedWorkspacePath(tab.pathname)),
+    [tabs],
+  );
 
   useEffect(() => {
     const bar = tabListRef.current;
