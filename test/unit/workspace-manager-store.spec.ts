@@ -14,6 +14,7 @@ import {
   getWorkspaceScopedState,
   getWorkspaceSearchParams,
   isDashboardWorkspacePath,
+  isWorkspaceListPath,
   listWorkspaceTabsForNavItem,
   moveWorkspaceTabToFront,
   normalizeWorkspacePathname,
@@ -57,7 +58,7 @@ test('creates, updates, clones, and removes workspace tabs', () => {
   store = upsertWorkspaceTab(store, createWorkspaceTab({ id: 'tab-1', pathname: '/customers', label: 'Clientes' }));
   store = setWorkspaceScopedState(store, 'tab-1', 'customers.searchQuery', 'maria');
   store = cloneWorkspaceTabState(store, 'tab-1', 'tab-2');
-  store = upsertWorkspaceTab(store, createWorkspaceTab({ id: 'tab-2', pathname: '/customers', label: 'Cliente · Maria' }));
+  store = upsertWorkspaceTab(store, createWorkspaceTab({ id: 'tab-2', pathname: '/customers?focusCustomerId=maria', label: 'Cliente · Maria' }));
 
   assert.deepEqual(
     store.tabs.map((tab) => tab.id),
@@ -117,6 +118,44 @@ test('ignores unnamed or empty workspace tabs', () => {
 
   assert.deepEqual(store.tabs.map((tab) => tab.id), ['tab-1']);
   assert.deepEqual(Object.keys(store.stateByTabId), ['tab-1']);
+});
+
+test('keeps one list tab per screen and still allows an open record', () => {
+  const store = normalizeWorkspaceStore({
+    tabs: [
+      createWorkspaceTab({ id: 'access-a', pathname: '/admin/access', label: 'Usuários e Acessos' }),
+      createWorkspaceTab({ id: 'access-b', pathname: '/admin/access?accessTab=roles', label: 'Usuários e Acessos' }),
+      createWorkspaceTab({ id: 'access-user', pathname: '/admin/access?focusUserId=1', label: 'Usuário: Ana' }),
+      createWorkspaceTab({ id: 'os-list', pathname: '/service-orders', label: 'Ordens de serviço' }),
+      createWorkspaceTab({ id: 'os-new', pathname: '/service-orders?workspaceMode=new', label: 'OS: Nova' }),
+    ],
+    activeTabId: 'access-b',
+    stateByTabId: {
+      'access-a': { stale: true },
+      'access-b': { keep: true },
+      'access-user': { form: true },
+      'os-list': { list: true },
+      'os-new': { draft: true },
+    },
+  });
+
+  assert.equal(isWorkspaceListPath('/admin/access?accessTab=roles'), true);
+  assert.equal(isWorkspaceListPath('/admin/access?focusUserId=1'), false);
+  assert.deepEqual(store.tabs.map((tab) => tab.id), ['access-b', 'access-user', 'os-list', 'os-new']);
+  assert.equal(store.activeTabId, 'access-b');
+  assert.equal('access-a' in store.stateByTabId, false);
+  assert.equal(getWorkspaceScopedState(store, 'access-user', 'form'), true);
+});
+
+test('skips rewriting scoped state when the value did not change', () => {
+  let store = createEmptyWorkspaceStore();
+  store = upsertWorkspaceTab(store, createWorkspaceTab({ id: 'tab-1', pathname: '/customers', label: 'Clientes' }));
+  store = setWorkspaceScopedState(store, 'tab-1', 'search', 'maria');
+  const again = setWorkspaceScopedState(store, 'tab-1', 'search', 'maria');
+  assert.equal(again, store);
+  const changed = setWorkspaceScopedState(store, 'tab-1', 'search', 'joao');
+  assert.notEqual(changed, store);
+  assert.equal(getWorkspaceScopedState<string>(changed, 'tab-1', 'search'), 'joao');
 });
 
 test('finds the latest workspace tab by menu base path', () => {

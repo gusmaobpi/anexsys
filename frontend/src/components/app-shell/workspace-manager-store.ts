@@ -44,6 +44,78 @@ export function arrangeWorkspaceTabs(tabs: WorkspaceTab[]): WorkspaceTab[] {
   return [...pinned, ...rest];
 }
 
+/** Query keys that still mean the list, not a record being edited. */
+const LIST_QUERY_KEYS = new Set(["accessTab"]);
+
+export function isWorkspaceListPath(pathname: string): boolean {
+  const query = normalizeWorkspacePathname(pathname).split("?")[1] ?? "";
+  const params = new URLSearchParams(query);
+  for (const key of params.keys()) {
+    if (!LIST_QUERY_KEYS.has(key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function sameWorkspaceValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (left === null || right === null || typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
+  }
+}
+
+function collapseDuplicateListTabs(store: WorkspaceStore): WorkspaceStore {
+  const keptByBase = new Map<string, string>();
+  const drop = new Set<string>();
+
+  for (const tab of store.tabs) {
+    if (!isWorkspaceListPath(tab.pathname)) {
+      continue;
+    }
+    const base = getWorkspaceBasePath(tab.pathname);
+    const keptId = keptByBase.get(base);
+    if (!keptId) {
+      keptByBase.set(base, tab.id);
+      continue;
+    }
+    if (store.activeTabId === tab.id) {
+      drop.add(keptId);
+      keptByBase.set(base, tab.id);
+    } else {
+      drop.add(tab.id);
+    }
+  }
+
+  if (drop.size === 0) {
+    return store;
+  }
+
+  const stateByTabId = { ...store.stateByTabId };
+  for (const tabId of drop) {
+    delete stateByTabId[tabId];
+  }
+  let activeTabId = store.activeTabId;
+  if (activeTabId && drop.has(activeTabId)) {
+    const dropped = store.tabs.find((tab) => tab.id === activeTabId);
+    activeTabId = dropped ? keptByBase.get(getWorkspaceBasePath(dropped.pathname)) ?? null : null;
+  }
+
+  return {
+    ...store,
+    tabs: store.tabs.filter((tab) => !drop.has(tab.id)),
+    activeTabId,
+    stateByTabId,
+  };
+}
+
 export function normalizeWorkspacePathname(pathname: string): string {
   const [pathWithQuery, hashFragment = ""] = pathname.trim().split("#");
   const [basePath, rawQuery = ""] = pathWithQuery.split("?");
@@ -89,11 +161,11 @@ export function isMeaningfulWorkspaceTab(tab: WorkspaceTab): boolean {
 }
 
 export function normalizeWorkspaceStore(store: WorkspaceStore): WorkspaceStore {
-  const stripped = stripHomeWorkspaceTabs({
+  const stripped = collapseDuplicateListTabs(stripHomeWorkspaceTabs({
     tabs: store.tabs.map((tab) => createWorkspaceTab(tab)).filter(isMeaningfulWorkspaceTab),
     activeTabId: store.activeTabId,
     stateByTabId: store.stateByTabId ?? {},
-  });
+  }));
   const tabs = arrangeWorkspaceTabs(stripped.tabs);
   const validTabIds = new Set(tabs.map((tab) => tab.id));
   const stateByTabId = Object.fromEntries(
@@ -184,6 +256,10 @@ export function cloneWorkspaceTabState(store: WorkspaceStore, sourceTabId: strin
 }
 
 export function setWorkspaceScopedState<T>(store: WorkspaceStore, tabId: string, scope: string, value: T): WorkspaceStore {
+  const current = store.stateByTabId[tabId]?.[scope];
+  if (scope in (store.stateByTabId[tabId] ?? {}) && sameWorkspaceValue(current, value)) {
+    return store;
+  }
   return {
     ...store,
     stateByTabId: {

@@ -19,6 +19,7 @@ import {
   createEmptyWorkspaceStore,
   createWorkspaceTab,
   findWorkspaceTabByBasePath,
+  getWorkspaceBasePath,
   getWorkspaceScopedState,
   HOME_WORKSPACE_PATH,
   isHomeWorkspacePath,
@@ -31,7 +32,9 @@ import {
   revealWorkspaceTab,
   setActiveWorkspaceTab,
   setWorkspaceScopedState,
+  sameWorkspaceValue,
   upsertWorkspaceTab,
+  isWorkspaceListPath,
   type WorkspaceStore,
   type WorkspaceTab,
   WORKSPACE_QUERY_PARAM,
@@ -119,12 +122,43 @@ function readStore(): WorkspaceStore {
   }
 }
 
-function writeStore(store: WorkspaceStore) {
+const WORKSPACE_PERSIST_DELAY_MS = 400;
+let persistTimer: number | null = null;
+let persistSnapshot: WorkspaceStore | null = null;
+let lastPersistedJson = "";
+
+function flushWorkspaceStore() {
+  if (typeof window === "undefined" || !persistSnapshot) {
+    return;
+  }
+  if (persistTimer !== null) {
+    window.clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  const json = JSON.stringify(persistSnapshot);
+  if (json === lastPersistedJson) {
+    return;
+  }
+  lastPersistedJson = json;
+  window.localStorage.setItem(WORKSPACE_STORAGE_KEY, json);
+}
+
+function scheduleWorkspaceStore(store: WorkspaceStore) {
+  persistSnapshot = store;
   if (typeof window === "undefined") {
     return;
   }
+  if (persistTimer !== null) {
+    window.clearTimeout(persistTimer);
+  }
+  persistTimer = window.setTimeout(() => {
+    persistTimer = null;
+    flushWorkspaceStore();
+  }, WORKSPACE_PERSIST_DELAY_MS);
+}
 
-  window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(store));
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushWorkspaceStore);
 }
 
 export function WorkspaceManagerProvider({ children }: Readonly<{ children: ReactNode }>) {
@@ -145,9 +179,12 @@ export function WorkspaceManagerProvider({ children }: Readonly<{ children: Reac
 
   const commitStore = useCallback((next: WorkspaceStore | ((current: WorkspaceStore) => WorkspaceStore)) => {
     const resolved = typeof next === "function" ? next(storeRef.current) : next;
+    if (resolved === storeRef.current) {
+      return resolved;
+    }
     storeRef.current = resolved;
     if (storageReadyRef.current) {
-      writeStore(resolved);
+      scheduleWorkspaceStore(resolved);
     }
     if (!storeRenderQueuedRef.current) {
       storeRenderQueuedRef.current = true;
@@ -163,7 +200,7 @@ export function WorkspaceManagerProvider({ children }: Readonly<{ children: Reac
     if (!storageReady) {
       return;
     }
-    writeStore(store);
+    scheduleWorkspaceStore(store);
   }, [storageReady, store]);
 
   useEffect(() => {
@@ -382,9 +419,29 @@ export function WorkspaceManagerProvider({ children }: Readonly<{ children: Reac
 
   const openWorkspaceFromMenu = useCallback(
     (nextPathname: string, label: string) => {
+      const basePath = getWorkspaceBasePath(nextPathname);
+      const existing = storeRef.current.tabs.find(
+        (tab) => getWorkspaceBasePath(tab.pathname) === basePath && isWorkspaceListPath(tab.pathname),
+      );
+      if (existing) {
+        const pathname = normalizeWorkspacePathname(nextPathname);
+        commitStore((current) =>
+          revealWorkspaceTab(
+            upsertWorkspaceTab(current, {
+              ...existing,
+              pathname,
+              label,
+              subtitle: null,
+            }),
+            existing.id,
+          ),
+        );
+        syncWorkspaceUrl(pathname, existing.id);
+        return;
+      }
       openWorkspaceInNewTab(nextPathname, label, { cloneCurrent: false, reuse: "path" });
     },
-    [openWorkspaceInNewTab],
+    [commitStore, openWorkspaceInNewTab, syncWorkspaceUrl],
   );
 
   const openWorkspaceInBrowserTab = useCallback(
@@ -648,7 +705,7 @@ export function useWorkspaceScopedState<T>(scope: string, initialValue: T): [T, 
     (next: T | ((current: T) => T)) => {
       setValue((current) => {
         const resolved = next instanceof Function ? (next as (value: T) => T)(current) : next;
-        if (scopedTabId) {
+        if (scopedTabId && !sameWorkspaceValue(current, resolved)) {
           queueMicrotask(() => {
             writeScopedState(scope, resolved, scopedTabId);
           });

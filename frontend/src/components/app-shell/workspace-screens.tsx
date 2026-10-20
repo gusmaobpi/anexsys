@@ -96,20 +96,16 @@ export function WorkspaceKeepAlive({ children }: Readonly<{ children: ReactNode 
   return (
     <>
       {tabs.map((tab) => {
+        if (tab.id !== currentTabId) {
+          return null;
+        }
         const Screen = resolveWorkspaceScreen(tab.pathname);
         if (!Screen) {
           return null;
         }
 
-        const active = tab.id === currentTabId;
         return (
-          <div
-            aria-hidden={!active}
-            className="workspace-pane"
-            hidden={!active}
-            inert={!active ? true : undefined}
-            key={tab.id}
-          >
+          <div className="workspace-pane" key={tab.id}>
             <WorkspacePaneProvider tab={tab}>
               <Screen />
             </WorkspacePaneProvider>
