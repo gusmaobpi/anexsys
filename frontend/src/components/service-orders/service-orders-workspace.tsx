@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceManager, useWorkspaceRegistration, useWorkspaceScopedState } from "@/components/app-shell/workspace-manager";
 import { useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
@@ -41,7 +41,7 @@ import { approvalMethodLabel, canRecordOsApproval, formatOsInstant, type Approva
 import { OsPickupPanel } from "@/components/service-orders/os-pickup-panel";
 import { pickupMethodLabel, type PickupSummary } from "@/components/service-orders/os-pickup";
 import { OsPayPanel, type OsFinancialSummary } from "@/components/service-orders/os-pay-panel";
-import { osCanOpenPay, osPaymentMethodLabel, osShowsFaltaPagamento } from "@/components/service-orders/os-payment";
+import { osCanOpenPay, osPaymentHistoryLabel, osShouldCloseOrderTab, osShowsFaltaPagamento } from "@/components/service-orders/os-payment";
 import { RowOverflowMenu, type RowMenuItem } from "@/components/ui/row-overflow-menu";
 import {
   addServiceOrderItemGridRow,
@@ -67,9 +67,12 @@ import {
   runClosedBagCommit,
   serviceOrderListLoadBinding,
   updateServiceOrderItemGridRow,
+  validateServiceOrderItemGrid,
   type PersistedServiceOrderItem,
   type ServiceOrderItemGridRow,
 } from "@/components/service-orders/service-order-workspace-view-model";
+
+const OS_LIST_REFRESH_EVENT = "anexsys:service-orders-changed";
 
 type ServiceOrderRecord = {
   id: string;
@@ -270,6 +273,72 @@ function formatWorkspaceMessage(error: unknown, fallback: string) {
   return describeWorkspaceError(error, fallback);
 }
 
+function scrollFieldIntoOsGrid(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  const grid = target.closest<HTMLElement>(".os-items-table");
+  if (!grid) {
+    return;
+  }
+  const field = target.closest("td, th") ?? target;
+  const gridRect = grid.getBoundingClientRect();
+  const fieldRect = field.getBoundingClientRect();
+  if (fieldRect.right > gridRect.right - 8) {
+    grid.scrollLeft += fieldRect.right - gridRect.right + 16;
+  } else if (fieldRect.left < gridRect.left + 8) {
+    grid.scrollLeft -= gridRect.left - fieldRect.left + 16;
+  }
+  const content = grid.closest<HTMLElement>(".workspace__content");
+  if (content) {
+    content.scrollLeft = 0;
+  }
+  document.documentElement.scrollLeft = 0;
+  document.body.scrollLeft = 0;
+}
+
+function fitOsWorkTextarea(element: HTMLTextAreaElement) {
+  element.style.height = "auto";
+  element.style.height = `${element.scrollHeight}px`;
+}
+
+function OsWorkTextarea({
+  disabled,
+  sequence,
+  value,
+  onChange,
+}: {
+  disabled: boolean;
+  sequence: number;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) {
+      return;
+    }
+    fitOsWorkTextarea(element);
+  }, [value]);
+
+  return (
+    <HoverPeek text={value}>
+      <textarea
+        ref={ref}
+        className="os-item-input os-item-input--work"
+        disabled={disabled}
+        maxLength={OS_WORK_MAX_CHARS}
+        placeholder="Detalhe o serviço combinado com o cliente"
+        rows={1}
+        value={value}
+        onChange={(event) => onChange(event.target.value.slice(0, OS_WORK_MAX_CHARS))}
+      />
+      <small className="os-item-work-hint">{osWorkPrintHint(value, sequence)}</small>
+    </HoverPeek>
+  );
+}
+
 export function ServiceOrdersWorkspace() {
   const searchParams = useWorkspaceSearchParams();
   const { session, hasAnyPermission, apiJson } = useSession();
@@ -286,6 +355,7 @@ export function ServiceOrdersWorkspace() {
   const canReadUsers = hasAnyPermission("users.read");
   const canReadFinance = hasAnyPermission("finance.read");
   const canWriteFinance = hasAnyPermission("finance.write");
+  const canRefund = hasAnyPermission("finance.refund");
   const canReadProduction = hasAnyPermission("production_orders.read");
   const canWriteProduction = hasAnyPermission("production_orders.write");
   const canWriteProof = canWrite || canWriteProduction;
@@ -605,6 +675,17 @@ export function ServiceOrdersWorkspace() {
     [apiJson, canRead, loadDetails, setActiveOrderId],
   );
 
+  useEffect(() => {
+    if (!isListWorkspace) {
+      return;
+    }
+    const onChanged = () => {
+      void loadOrders();
+    };
+    window.addEventListener(OS_LIST_REFRESH_EVENT, onChanged);
+    return () => window.removeEventListener(OS_LIST_REFRESH_EVENT, onChanged);
+  }, [isListWorkspace, loadOrders]);
+
   const loadCustomers = useCallback(async () => {
     if (!canWrite || !canReadCustomers) {
       setCustomers([]);
@@ -705,12 +786,17 @@ export function ServiceOrdersWorkspace() {
       }
       try {
         const summary = await apiJson<OsFinancialSummary>(`/service-orders/${order.id}/financial-summary`);
-        setPayTarget({ orderNo: order.orderNo, branchId: order.branchId ?? null, summary });
+        setPaymentSummary(summary);
+        setPayTarget({
+          orderNo: order.orderNo,
+          branchId: order.branchId ?? session?.activeBranchId ?? null,
+          summary,
+        });
       } catch (error) {
         setMessage(formatWorkspaceMessage(error, "O resumo financeiro não pôde ser carregado."));
       }
     },
-    [apiJson, canReadFinance, canWriteFinance],
+    [apiJson, canReadFinance, canWriteFinance, session?.activeBranchId],
   );
 
   const companyName = activeCompany?.displayName ?? "ANEXSYS";
@@ -757,7 +843,7 @@ export function ServiceOrdersWorkspace() {
         });
         setPaymentSummary(summary);
       } catch {
-        /* a OP sai mesmo se o financeiro não puder ser lido; parcial e em aberto = Pagar na retirada */
+        /* a OP sai mesmo se o financeiro não puder ser lido; parcial e em aberto = Saldo em aberto */
       }
       printProductionOrderDocument(view, companyName, reservedWindow, paymentCondition);
       return view;
@@ -1399,14 +1485,12 @@ export function ServiceOrdersWorkspace() {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         setAnexoViewer(null);
-        if (isListWorkspace) {
-          setPayTarget(null);
-        }
+        setPayTarget(null);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [anexoViewer, isListWorkspace, payTarget]);
+  }, [anexoViewer, payTarget]);
 
   useEffect(() => {
     if (!isListWorkspace) {
@@ -1513,16 +1597,18 @@ export function ServiceOrdersWorkspace() {
     [apiJson, canWrite, loadOrders, openServiceOrderWorkspace, selectedOrder],
   );
 
-  const closeServiceOrderWorkspace = useCallback(() => {
+  const closeServiceOrderWorkspace = useCallback((options?: { skipDiscard?: boolean }) => {
     const discardEmptyLinkedVersion = () => {
       if (
-        canWrite &&
-        selectedOrder &&
-        (details?.items.length ?? 0) === 0 &&
-        (details?.groupVersions?.length ?? 0) > 1
+        options?.skipDiscard ||
+        !canWrite ||
+        !selectedOrder ||
+        (details?.items.length ?? 0) > 0 ||
+        (details?.groupVersions?.length ?? 0) <= 1
       ) {
-        void apiJson(`/service-orders/${selectedOrder.id}/cancel`, { method: "POST" }).catch(() => undefined);
+        return;
       }
+      void apiJson(`/service-orders/${selectedOrder.id}/cancel`, { method: "POST" }).catch(() => undefined);
     };
 
     discardEmptyLinkedVersion();
@@ -1556,7 +1642,7 @@ export function ServiceOrdersWorkspace() {
   ]);
 
   useEffect(() => {
-    if (workspaceMode !== "new") {
+    if (workspaceMode !== "new" || showCreateForm || activeOrderId) {
       return;
     }
 
@@ -1565,30 +1651,13 @@ export function ServiceOrdersWorkspace() {
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [openCreateForm, workspaceMode]);
+  }, [activeOrderId, openCreateForm, showCreateForm, workspaceMode]);
 
   function validateItems(requireAtLeastOneItem: boolean) {
-    if (requireAtLeastOneItem && visibleItemRows.length === 0) {
-      return "Inclua pelo menos uma peça antes de salvar a OS.";
-    }
-
-    if (visibleItemRows.length > maxPiecesPerBag) {
-      return `Esta versão da OS aceita no máximo ${maxPiecesPerBag} peças. Feche a sacola para abrir a próxima versão.`;
-    }
-
-    for (const row of visibleItemRows) {
-      if (!row.itemType.trim() || !row.description.trim()) {
-        return "Cada peça precisa de produto e serviço antes de salvar.";
-      }
-      if (!row.brand.trim()) {
-        return "Cada peça precisa da marca.";
-      }
-      if (Number(row.quantity) !== 1) {
-        return "Cada linha é uma peça. A quantidade fica em 1.";
-      }
-    }
-
-    return null;
+    return validateServiceOrderItemGrid(itemRows, {
+      requireAtLeastOne: requireAtLeastOneItem,
+      maxItems: maxPiecesPerBag,
+    });
   }
 
   async function persistCurrentServiceOrder(requireAtLeastOneItem: boolean) {
@@ -1695,17 +1764,18 @@ export function ServiceOrdersWorkspace() {
     return { id: selectedOrder.id, orderNo: selectedOrder.orderNo };
   }
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  function notifyServiceOrderList() {
+    window.dispatchEvent(new CustomEvent(OS_LIST_REFRESH_EVENT));
+  }
+
+  async function handleCreate(event: { preventDefault(): void }) {
     event.preventDefault();
-    if (bagClosed) {
-      await handleClosedBagSave();
-      return;
-    }
     setSaving(true);
     setMessage(null);
     try {
       const persisted = await persistCurrentServiceOrder(true);
       await loadOrders(persisted.id);
+      notifyServiceOrderList();
       navigateWithinWorkspace(`/service-orders?focusServiceOrderId=${encodeURIComponent(persisted.id)}`);
       setMessage("OS salva como rascunho. A sacola ainda está aberta e a OP ainda não foi gerada.");
     } catch (error) {
@@ -1720,17 +1790,14 @@ export function ServiceOrdersWorkspace() {
     }
   }
 
-  async function handleUpdate(event: FormEvent<HTMLFormElement>) {
+  async function handleUpdate(event: { preventDefault(): void }) {
     event.preventDefault();
-    if (bagClosed) {
-      await handleClosedBagSave();
-      return;
-    }
     setSaving(true);
     setMessage(null);
     try {
       const persisted = await persistCurrentServiceOrder(false);
       await loadOrders(persisted.id);
+      notifyServiceOrderList();
       setMessage("OS atualizada como rascunho. A sacola ainda está aberta e a OP ainda não foi gerada.");
     } catch (error) {
       setMessage(
@@ -1742,6 +1809,32 @@ export function ServiceOrdersWorkspace() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function closeSavedServiceOrderTab() {
+    if (!currentTabId || isMobile) {
+      setShowCreateForm(false);
+      setActiveOrderId(null);
+      setDetails(null);
+      navigateWithinWorkspace("/service-orders");
+      return;
+    }
+
+    closeWorkspace(currentTabId);
+  }
+
+  function continueWithNewServiceOrder() {
+    const closingTabId = currentTabId;
+    if (!closingTabId || isMobile) {
+      openCreateForm();
+      navigateWithinWorkspace("/service-orders?workspaceMode=new");
+      return;
+    }
+
+    openCreateWorkspace();
+    window.setTimeout(() => {
+      closeWorkspace(closingTabId);
+    }, 0);
   }
 
   async function persistAndCloseBag() {
@@ -1788,7 +1881,7 @@ export function ServiceOrdersWorkspace() {
       setWantsNextVersion(false);
       await loadOrders(closed.serviceOrder.id);
       setMessage(
-        "Sacola fechada. Esta versão ficou travada. Se errou, use Abrir sacola. Para imprimir a OP, clique em Salvar. Se ainda houver peças, marque Abrir nova versão e depois Salvar.",
+        "Sacola fechada. Esta versão ficou travada. Se errou, use Abrir sacola. Para imprimir a OP, clique em Gravar. Se ainda houver peças, marque Abrir nova versão e depois Gravar.",
       );
     } catch (error) {
       setMessage(
@@ -1828,7 +1921,7 @@ export function ServiceOrdersWorkspace() {
     }
   }
 
-  async function handleClosedBagSave() {
+  async function handleClosedBagSave(after: "close" | "continue") {
     if (!canWrite || !selectedOrder?.bagClosed) {
       return;
     }
@@ -1839,6 +1932,7 @@ export function ServiceOrdersWorkspace() {
     try {
       const result = await commitClosedBag(selectedOrder, reservedPrintWindow);
       await loadOrders(selectedOrder.id);
+      notifyServiceOrderList();
       if (result.nextOrderNo && result.printError) {
         reservedPrintWindow?.close();
         setMessage(
@@ -1846,11 +1940,11 @@ export function ServiceOrdersWorkspace() {
         );
         return;
       }
-      setMessage(
-        result.nextOrderNo
-          ? `OP ${result.printed?.productionNo} da ${selectedOrder.orderNo} enviada para impressão. A versão ${result.nextOrderNo} abriu em outra aba, já editável.`
-          : `OP ${result.printed?.productionNo} da ${selectedOrder.orderNo} enviada para impressão e já pode ir no bolso transparente.`,
-      );
+      if (after === "continue") {
+        continueWithNewServiceOrder();
+        return;
+      }
+      closeSavedServiceOrderTab();
     } catch (error) {
       reservedPrintWindow?.close();
       setMessage(
@@ -1869,7 +1963,9 @@ export function ServiceOrdersWorkspace() {
   function focusItemRow(localId: string) {
     window.requestAnimationFrame(() => {
       const row = document.querySelector<HTMLElement>(`[data-os-item-row="${localId}"]`);
-      row?.querySelector<HTMLInputElement>("input:not([disabled])")?.focus();
+      const field = row?.querySelector<HTMLInputElement>("input:not([disabled])");
+      field?.focus({ preventScroll: true });
+      scrollFieldIntoOsGrid(field ?? null);
     });
   }
 
@@ -1886,20 +1982,10 @@ export function ServiceOrdersWorkspace() {
     return true;
   }
 
-  function handleDiscountTab(event: KeyboardEvent<HTMLInputElement>, localId: string) {
-    if (event.key !== "Tab" || event.shiftKey) {
-      return;
-    }
-    const lastVisible = visibleItemRows[visibleItemRows.length - 1];
-    if (lastVisible?.localId !== localId) {
-      return;
-    }
-    if (!canAddServiceOrderItemGridRow(itemRows, maxPiecesPerBag)) {
-      return;
-    }
-    event.preventDefault();
-    addPieceRow();
-  }
+  const addPieceRowId = useMemo(() => {
+    const editingRow = [...visibleItemRows].reverse().find((row) => showCreateForm || row.isEditing);
+    return (editingRow ?? visibleItemRows[visibleItemRows.length - 1])?.localId ?? null;
+  }, [showCreateForm, visibleItemRows]);
 
   if (!canRead) {
     return (
@@ -2054,7 +2140,7 @@ export function ServiceOrdersWorkspace() {
         />
       ) : null}
 
-      {isListWorkspace && payTarget ? (
+      {payTarget ? (
         <div aria-labelledby="os-pay-title" aria-modal="true" className="os-anexo-lightbox" role="dialog">
           <button
             aria-label="Fechar pagamento"
@@ -2066,10 +2152,16 @@ export function ServiceOrdersWorkspace() {
             <OsPayPanel
               orderNo={payTarget.orderNo}
               branchId={payTarget.branchId}
+              canRefund={canRefund}
               summary={payTarget.summary}
               onClose={() => setPayTarget(null)}
               onPaid={(summary) => {
                 const paid = Number(summary.outstandingBalance) <= 0;
+                const closeOrderTab = osShouldCloseOrderTab({
+                  outstandingBalance: summary.outstandingBalance,
+                  openCharge: summary.openCharge,
+                  fromList: isListWorkspace,
+                });
                 setPayTarget(paid ? null : { orderNo: payTarget.orderNo, branchId: payTarget.branchId, summary });
                 setPaymentSummary(summary);
                 setOrders((current) =>
@@ -2084,11 +2176,21 @@ export function ServiceOrdersWorkspace() {
                       : order,
                   ),
                 );
-                setMessage(
-                  paid
-                    ? `Pagamento da OS ${payTarget.orderNo} registrado. A OS está quitada.`
-                    : `Pagamento parcial da OS ${payTarget.orderNo} registrado.`,
-                );
+                notifyServiceOrderList();
+                const amountPaidNow = Number(summary.amountPaid);
+                const amountPaidBefore = Number(paymentSummary?.amountPaid ?? 0);
+                if (summary.openCharge) {
+                  setMessage(`Cobrança da OS ${payTarget.orderNo} enviada. O sistema consulta a maquininha antes de cobrar de novo.`);
+                } else if (paid) {
+                  setMessage(`Pagamento da OS ${payTarget.orderNo} registrado. A OS está quitada.`);
+                } else if (amountPaidNow < amountPaidBefore) {
+                  setMessage(`Estorno da OS ${payTarget.orderNo} registrado. O saldo voltou a ficar em aberto.`);
+                } else if (amountPaidNow > amountPaidBefore) {
+                  setMessage(`Pagamento parcial da OS ${payTarget.orderNo} registrado.`);
+                }
+                if (closeOrderTab) {
+                  closeSavedServiceOrderTab();
+                }
               }}
             />
           </div>
@@ -2104,9 +2206,9 @@ export function ServiceOrdersWorkspace() {
                 {showCreateForm
                   ? `Cada linha é uma peça. Cada versão aceita até ${maxPiecesPerBag} peças. Salvar grava rascunho. Fechar sacola só trava.`
                   : selectedOrder?.bagClosed
-                    ? `Sacola fechada. Esta versão está travada. Se errou, abra a sacola. Salvar imprime a OP. Se ainda houver peças, marque Abrir nova versão na grade.`
+                    ? `Sacola fechada. Esta versão está travada. Se errou, abra a sacola. Gravar imprime a OP, atualiza a grade e fecha esta aba. Gravar e Continuar faz o mesmo e abre uma OS nova.`
                     : selectedOrder
-                      ? `Cada linha é uma peça. Cada versão aceita até ${maxPiecesPerBag} peças. Salvar grava rascunho. Fechar sacola trava; a OP só sai ao salvar depois.`
+                      ? `Cada linha é uma peça. Cada versão aceita até ${maxPiecesPerBag} peças. Salvar alterações grava rascunho. Fechar sacola trava; a OP só sai ao gravar depois.`
                       : "Abra uma OS na grade ou cadastre uma nova."}
               </p>
               {!showCreateForm && selectedOrder?.publicToken ? (
@@ -2240,7 +2342,21 @@ export function ServiceOrdersWorkspace() {
           ) : null}
 
           {showCreateForm || selectedOrder ? (
-            <form className="form-grid" onSubmit={showCreateForm ? handleCreate : handleUpdate}>
+            <form
+              className="form-grid"
+              onSubmit={(event) => {
+                if (!showCreateForm && bagClosed) {
+                  event.preventDefault();
+                  void handleClosedBagSave("close");
+                  return;
+                }
+                if (showCreateForm) {
+                  void handleCreate(event);
+                  return;
+                }
+                void handleUpdate(event);
+              }}
+            >
               <div className="mini-section">
                 <h4>Cliente</h4>
                 <div className="os-client-row">
@@ -2480,28 +2596,31 @@ export function ServiceOrdersWorkspace() {
                 </div>
               </div>
 
-              <div className="mini-section os-items-section">
+              <div
+                className="mini-section os-items-section"
+                onFocusCapture={(event) => {
+                  const target = event.target;
+                  window.requestAnimationFrame(() => scrollFieldIntoOsGrid(target));
+                }}
+              >
                 <div className="workspace-toolbar">
                   <div className="workspace-toolbar__copy">
                     <h4>Serviços e mão de obra</h4>
                     <p>
                       Cada linha é uma peça (quantidade 1). A marca é obrigatória; modelo e série são opcionais. Até {maxPiecesPerBag} peças nesta versão. Fechar trava;
-                      Abrir sacola desfaz. Salvar com a sacola fechada imprime a OP.
+                      Abrir sacola desfaz. Gravar com a sacola fechada imprime a OP.
                     </p>
                   </div>
                 </div>
 
-                <div
-                  className="data-table-wrapper os-items-table"
-                  style={{ ["--os-item-limit" as string]: maxPiecesPerBag }}
-                >
+                <div className="data-table-wrapper os-items-table">
                   <table className="data-table">
                     <thead>
                       <tr>
                         <th title="Sequência">S</th>
                         <th>Produto</th>
                         <th>Serviço</th>
-                        <th>Detalhamento do ajuste</th>
+                        <th>Detalhar o serviço</th>
                         <th>Marca</th>
                         <th>Modelo</th>
                         <th>Série</th>
@@ -2509,6 +2628,9 @@ export function ServiceOrdersWorkspace() {
                         <th>Valor</th>
                         <th>Desconto</th>
                         <th>Subtotal</th>
+                        <th className="os-add-piece-col">
+                          <span className="sr-only">Adicionar peça</span>
+                        </th>
                         <th>Ações</th>
                       </tr>
                     </thead>
@@ -2640,24 +2762,16 @@ export function ServiceOrdersWorkspace() {
                               />
                             </td>
                             <td>
-                              <HoverPeek text={row.complement}>
-                                <textarea
-                                  className="os-item-input os-item-input--work"
-                                  disabled={!editable}
-                                  maxLength={OS_WORK_MAX_CHARS}
-                                  placeholder="Detalhe do ajuste combinado com o cliente"
-                                  rows={3}
-                                  value={row.complement}
-                                  onChange={(event) =>
-                                    setItemRows((current) =>
-                                      updateServiceOrderItemGridRow(current, row.localId, {
-                                        complement: event.target.value.slice(0, OS_WORK_MAX_CHARS),
-                                      }),
-                                    )
-                                  }
-                                />
-                                <small className="os-item-work-hint">{osWorkPrintHint(row.complement, sequence)}</small>
-                              </HoverPeek>
+                              <OsWorkTextarea
+                                disabled={!editable}
+                                sequence={sequence}
+                                value={row.complement}
+                                onChange={(complement) =>
+                                  setItemRows((current) =>
+                                    updateServiceOrderItemGridRow(current, row.localId, { complement }),
+                                  )
+                                }
+                              />
                             </td>
                             <td>
                               <input
@@ -2752,10 +2866,24 @@ export function ServiceOrdersWorkspace() {
                                     }),
                                   )
                                 }
-                                onKeyDown={(event) => handleDiscountTab(event, row.localId)}
                               />
                             </td>
                             <td>{formatOsMoney(calculateServiceOrderItemSubtotal(row))}</td>
+                            <td className="os-add-piece-col">
+                              {canMutateItems && row.localId === addPieceRowId ? (
+                                <button
+                                  aria-label="Adicionar peça"
+                                  className="os-add-piece"
+                                  disabled={saving || !canAddServiceOrderItemGridRow(itemRows, maxPiecesPerBag)}
+                                  onClick={() => {
+                                    addPieceRow();
+                                  }}
+                                  type="button"
+                                >
+                                  +
+                                </button>
+                              ) : null}
+                            </td>
                             <td>
                               <div className="os-item-actions">
                                 {canMutateRow ? (
@@ -2790,8 +2918,23 @@ export function ServiceOrdersWorkspace() {
                       })}
                       {visibleItemRows.length === 0 ? (
                         <tr>
-                          <td colSpan={11}>
-                            <div className="empty-state">Nenhuma peça na grade. Use Adicionar peça para continuar.</div>
+                          <td colSpan={13}>
+                            <div className="empty-state">
+                              Nenhuma peça na grade.
+                              {canMutateItems ? (
+                                <button
+                                  aria-label="Adicionar peça"
+                                  className="os-add-piece"
+                                  disabled={saving || !canAddServiceOrderItemGridRow(itemRows, maxPiecesPerBag)}
+                                  onClick={() => {
+                                    addPieceRow();
+                                  }}
+                                  type="button"
+                                >
+                                  +
+                                </button>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       ) : null}
@@ -2801,16 +2944,6 @@ export function ServiceOrdersWorkspace() {
                 <div className="os-items-footer">
                   {canMutateItems ? (
                     <div className="button-row">
-                      <button
-                        className="os-add-item"
-                        disabled={saving || !canAddServiceOrderItemGridRow(itemRows, maxPiecesPerBag)}
-                        onClick={() => {
-                          addPieceRow();
-                        }}
-                        type="button"
-                      >
-                        + Adicionar peça
-                      </button>
                       <button
                         className="button"
                         disabled={saving || visibleItemRows.length === 0}
@@ -2867,50 +3000,60 @@ export function ServiceOrdersWorkspace() {
                     <input disabled value={formatOsMoney(Number(selectedOrder?.totalValue ?? laborTotal))} />
                   </label>
                 </div>
-              </div>
-
-              <div className="mini-section">
-                <h4>Pagamento</h4>
                 {osShowsFaltaPagamento(paymentSummary) ? (
                   <p className="os-rule-banner">Falta pagamento. Isso não muda o status da OS.</p>
                 ) : null}
-                <div className="os-box">
-                  <div className="os-pay-row">
-                    <label className="field">
-                      <span>Condição</span>
-                      <input
-                        disabled
-                        value={osOpHeaderTerm({
-                          returnKind: selectedOrder?.returnKind,
-                          paymentStatus: paymentSummary?.paymentStatus,
-                        })}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Já pago</span>
-                      <input disabled value={formatOsMoney(Number(paymentSummary?.amountPaid ?? 0))} />
-                    </label>
-                    <label className="field">
-                      <span>Em aberto</span>
-                      <input
-                        disabled
-                        value={formatOsMoney(
-                          Number(paymentSummary?.outstandingBalance ?? selectedOrder?.totalValue ?? laborTotal),
-                        )}
-                      />
-                    </label>
-                    {canWriteFinance && selectedOrder ? (
+                <div className="os-pay-row">
+                  <label className="field">
+                    <span>Condição</span>
+                    <input
+                      disabled
+                      value={osOpHeaderTerm({
+                        returnKind: selectedOrder?.returnKind,
+                        paymentStatus: paymentSummary?.paymentStatus,
+                      })}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Já pago</span>
+                    <input disabled value={formatOsMoney(Number(paymentSummary?.amountPaid ?? 0))} />
+                  </label>
+                  <label className="field">
+                    <span>Saldo em aberto</span>
+                    <input
+                      disabled
+                      value={formatOsMoney(
+                        Number(paymentSummary?.outstandingBalance ?? selectedOrder?.totalValue ?? laborTotal),
+                      )}
+                    />
+                  </label>
+                </div>
+                {(paymentSummary?.payments ?? []).length > 0 ? (
+                  <ul className="os-pay-history">
+                    {(paymentSummary?.payments ?? []).map((payment) => (
+                      <li key={payment.id}>
+                        <span>
+                          {osPaymentHistoryLabel(payment)}
+                          {formatOsInstant(payment.receivedAt) ? ` · ${formatOsInstant(payment.receivedAt)}` : ""}
+                        </span>
+                        <strong>{formatOsMoney(Number(payment.paymentAmount))}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="table-subtle">Nenhum pagamento registrado. O Pagar só anota o que já entrou no caixa.</p>
+                )}
+                {selectedOrder && (canWriteFinance || canRefund) ? (
+                  <div className="os-pay-actions">
+                    {canWriteFinance && osCanOpenPay({
+                      status: selectedOrder.status,
+                      paymentStatus: paymentSummary?.paymentStatus ?? selectedOrder.paymentStatus,
+                      payLockedOnParent:
+                        selectedOrder.payLockedOnParent ?? details?.payLockedOnParent ?? details?.serviceOrder.payLockedOnParent,
+                    }) ? (
                       <button
                         className="button"
-                        disabled={
-                          saving ||
-                          !osCanOpenPay({
-                            status: selectedOrder.status,
-                            paymentStatus: paymentSummary?.paymentStatus,
-                            payLockedOnParent:
-                              selectedOrder.payLockedOnParent ?? details?.payLockedOnParent ?? details?.serviceOrder.payLockedOnParent,
-                          })
-                        }
+                        disabled={saving}
                         onClick={() => {
                           void openPay(selectedOrder);
                         }}
@@ -2919,36 +3062,19 @@ export function ServiceOrdersWorkspace() {
                         Pagar
                       </button>
                     ) : null}
+                    {canRefund && (paymentSummary?.payments ?? []).some((payment) => payment.status === "received" || payment.status === "settled") ? (
+                      <button
+                        className="button-secondary"
+                        disabled={saving}
+                        onClick={() => {
+                          void openPay(selectedOrder);
+                        }}
+                        type="button"
+                      >
+                        Estornar
+                      </button>
+                    ) : null}
                   </div>
-                  {(paymentSummary?.payments ?? []).length > 0 ? (
-                    <ul className="os-pay-history">
-                      {(paymentSummary?.payments ?? []).map((payment) => (
-                        <li key={payment.id}>
-                          <span>
-                            {osPaymentMethodLabel(payment.paymentMethod)}
-                            {formatOsInstant(payment.receivedAt) ? ` · ${formatOsInstant(payment.receivedAt)}` : ""}
-                          </span>
-                          <strong>{formatOsMoney(Number(payment.paymentAmount))}</strong>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="table-subtle">Nenhum pagamento registrado. O Pagar só anota o que já entrou no caixa.</p>
-                  )}
-                </div>
-                {selectedOrder && payTarget?.summary.serviceOrderId === selectedOrder.id ? (
-                  <OsPayPanel
-                    orderNo={selectedOrder.orderNo}
-                    branchId={selectedOrder.branchId ?? null}
-                    summary={payTarget.summary}
-                    onClose={() => setPayTarget(null)}
-                    onPaid={(summary) => {
-                      const paid = Number(summary.outstandingBalance) <= 0;
-                      setPayTarget(paid ? null : { orderNo: selectedOrder.orderNo, branchId: selectedOrder.branchId ?? null, summary });
-                      setPaymentSummary(summary);
-                      setMessage(paid ? "Pagamento registrado. A OS está quitada." : "Pagamento parcial registrado.");
-                    }}
-                  />
                 ) : null}
               </div>
 
@@ -3015,7 +3141,7 @@ export function ServiceOrdersWorkspace() {
                 <div className="mini-section">
                   <h4>Anotações de prova</h4>
                   <p className="os-rule-banner">
-                    Histórico da nova medição. Não mistura com Observação nem com Detalhamento do ajuste.
+                    Histórico da nova medição. Não mistura com Observação nem com Detalhar o serviço.
                   </p>
                   <div className="os-return-items">
                     {details.proofNotes.map((batch) => (
@@ -3040,6 +3166,11 @@ export function ServiceOrdersWorkspace() {
               ) : null}
 
               <div className="os-form-footer">
+                {message ? (
+                  <div className="os-form-footer__notice">
+                    <WorkspaceFlash message={message} />
+                  </div>
+                ) : null}
                 {selectedOrder && bagClosed && wantsNextVersion ? (
                   <p className="os-rule-banner os-form-footer__notice">
                     Ao salvar, será gerada a nova versão <strong>{nextVersionNo}</strong>. Ela abre em outra aba. Esta OS imprime a OP.
@@ -3068,7 +3199,17 @@ export function ServiceOrdersWorkspace() {
                   ) : selectedOrder && bagClosed ? (
                     <>
                       <button className="button" disabled={saving || !canWrite} type="submit">
-                        {saving ? "Salvando…" : "Salvar"}
+                        {saving ? "Gravando…" : "Gravar"}
+                      </button>
+                      <button
+                        className="button-secondary"
+                        disabled={saving || !canWrite}
+                        onClick={() => {
+                          void handleClosedBagSave("continue");
+                        }}
+                        type="button"
+                      >
+                        {saving ? "Gravando…" : "Gravar e Continuar"}
                       </button>
                       {canReopenSelectedBag ? (
                       <button
@@ -3149,28 +3290,6 @@ export function ServiceOrdersWorkspace() {
                           Cliente voltou
                         </button>
                       ) : null}
-                      {canWriteFinance ? (
-                        <button
-                          className="button"
-                          disabled={
-                            saving ||
-                            !osCanOpenPay({
-                              status: selectedOrder.status,
-                              paymentStatus: paymentSummary?.paymentStatus,
-                              payLockedOnParent:
-                                selectedOrder.payLockedOnParent ??
-                                details?.payLockedOnParent ??
-                                details?.serviceOrder.payLockedOnParent,
-                            })
-                          }
-                          onClick={() => {
-                            void openPay(selectedOrder);
-                          }}
-                          type="button"
-                        >
-                          Pagar
-                        </button>
-                      ) : null}
                       <RowOverflowMenu items={buildOsRowMenu(selectedOrder)} label={`Opções da OS ${selectedOrder.orderNo}`} />
                       <OsAnexoButton
                         disabled={Boolean(anexoViewer?.loading)}
@@ -3208,28 +3327,6 @@ export function ServiceOrdersWorkspace() {
                           type="button"
                         >
                           Aprovação
-                        </button>
-                      ) : null}
-                      {canWriteFinance ? (
-                        <button
-                          className="button"
-                          disabled={
-                            saving ||
-                            !osCanOpenPay({
-                              status: selectedOrder.status,
-                              paymentStatus: paymentSummary?.paymentStatus,
-                              payLockedOnParent:
-                                selectedOrder.payLockedOnParent ??
-                                details?.payLockedOnParent ??
-                                details?.serviceOrder.payLockedOnParent,
-                            })
-                          }
-                          onClick={() => {
-                            void openPay(selectedOrder);
-                          }}
-                          type="button"
-                        >
-                          Pagar
                         </button>
                       ) : null}
                       <RowOverflowMenu items={buildOsRowMenu(selectedOrder)} label={`Opções da OS ${selectedOrder.orderNo}`} />

@@ -43,6 +43,11 @@ export class PaymentRecordRepository {
     return this.repository.find({ where: { serviceOrderId }, order: { createdAt: 'ASC' } });
   }
 
+  async findPendingByBillingScope(billingScopeId: string, manager?: EntityManager): Promise<PaymentRecordEntity | null> {
+    const repository = manager ? manager.getRepository(PaymentRecordEntity) : this.repository;
+    return repository.findOne({ where: { billingScopeId, status: PaymentRecordStatus.PENDING } });
+  }
+
   async search(tenantId: string, filters: PaymentRecordSearchFilters): Promise<PaymentRecordEntity[]> {
     const query = this.repository.createQueryBuilder('payment').where('payment.tenant_id = :tenantId', { tenantId });
     if (filters.accessibleBranchIds.length === 0) {

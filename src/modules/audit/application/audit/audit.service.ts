@@ -45,4 +45,8 @@ export class AuditService {
   async listByEntity(tenantId: string, entityType: string, entityId: string, limit: number = 50): Promise<AuditEventEntity[]> {
     return this.auditEventRepository.findByEntity(tenantId, entityType, entityId, limit);
   }
+
+  async listByAction(tenantId: string, action: string, limit: number = 20): Promise<AuditEventEntity[]> {
+    return this.auditEventRepository.findByAction(tenantId, action, limit);
+  }
 }

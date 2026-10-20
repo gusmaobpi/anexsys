@@ -1,4 +1,4 @@
-import { PaymentDirection, PaymentMethod, PaymentProviderName, PaymentRecordStatus } from 'src/shared/domain/enums';
+import { PaymentDirection, PaymentMethod, PaymentModality, PaymentProviderName, PaymentRecordStatus } from 'src/shared/domain/enums';
 
 export interface CreatePaymentAllocationDto {
   serviceOrderItemId?: string | null;
@@ -11,6 +11,8 @@ export interface CreatePaymentDto {
   serviceOrderId: string;
   paymentReferenceNo?: string | null;
   paymentMethod: PaymentMethod;
+  informedModality?: PaymentModality | null;
+  manualReason?: string | null;
   paymentProvider?: PaymentProviderName | null;
   paymentDirection?: PaymentDirection;
   paymentAmount: number;

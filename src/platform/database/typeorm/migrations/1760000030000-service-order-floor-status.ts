@@ -16,10 +16,12 @@ export class ServiceOrderFloorStatus1760000030000 implements MigrationInterface 
         'approved',
         'cancelled',
         'in_production',
+        'awaiting_proof',
         'awaiting_quality',
         'quality',
         'in_rework',
-        'ready_for_pickup'
+        'ready_for_pickup',
+        'picked_up'
       ))
     `);
   }

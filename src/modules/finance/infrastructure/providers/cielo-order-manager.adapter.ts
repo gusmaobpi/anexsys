@@ -8,6 +8,7 @@ import {
 } from '../../contracts/provider/payment-provider.contract';
 import { PaymentProviderRequestError } from '../../contracts/provider/payment-provider-request-error';
 import { PaymentProviderRegistry } from '../../application/finance/payment-provider-registry';
+import { cieloPaymentCode, mapOperatorProductToModality } from '../../application/finance/payment-modality';
 
 export const CIELO_SANDBOX_BASE_URL = 'https://api.cielo.com.br/sandbox-lio/order-management/v1';
 export const CIELO_PRODUCTION_BASE_URL = 'https://api.cielo.com.br/order-management/v1';
@@ -37,14 +38,18 @@ export class CieloOrderManagerAdapter implements PaymentProviderAdapter, OnModul
     const config = this.resolveApiConfig(request.credentials, request.environment);
     const amountInCents = Math.round(request.amount * 100);
     const description = request.description ?? request.referenceNo;
+    const paymentCode = cieloPaymentCode(request.informedModality);
 
     // Fluxo oficial: cria a ordem como DRAFT e depois a libera para pagamento (PLACE).
+    // payment_code faz a Cielo Smart abrir já na forma escolhida. Na LIO antiga esse campo é ignorado.
     const created = await this.callCielo(config, 'POST', '/orders', {
       number: request.referenceNo,
       reference: description,
       status: 'DRAFT',
       notes: description,
       price: amountInCents,
+      ...(paymentCode ? { payment_code: paymentCode } : {}),
+      ...(paymentCode && paymentCode !== 'PIX' ? { installments: 0 } : {}),
       items: [
         {
           sku: request.referenceNo,
@@ -131,6 +136,11 @@ export class CieloOrderManagerAdapter implements PaymentProviderAdapter, OnModul
     };
   }
 
+  async cancelOrder(orderId: string, options?: { credentials?: Record<string, string>; environment?: string }): Promise<void> {
+    const config = this.resolveApiConfig(options?.credentials, options?.environment);
+    await this.callCielo(config, 'PUT', `/orders/${encodeURIComponent(orderId)}?operation=CLOSE`);
+  }
+
   /** Fluxo oficial de simulação (somente Sandbox): adiciona uma transação CONFIRMED manualmente. */
   async simulateSandboxPayment(
     orderId: string,
@@ -151,10 +161,10 @@ export class CieloOrderManagerAdapter implements PaymentProviderAdapter, OnModul
       number: String(Date.now()).slice(-8),
       amount: amountInCents,
       transaction_type: 'PAYMENT',
-      payment_fields: {
-        primary_product_name: 'CREDIT',
-        secondary_product_name: 'ONE LUMP SUM',
-        number_of_quotas: 0,
+      paymentFields: {
+        primaryProductName: 'CREDIT',
+        secondaryProductName: 'ONE LUMP SUM',
+        numberOfQuotas: 0,
       },
       card: { brand: 'VISA', mask: '************0000' },
     });
@@ -257,8 +267,11 @@ export class CieloOrderManagerAdapter implements PaymentProviderAdapter, OnModul
   private readTransactionFields(transaction: Record<string, unknown>) {
     const paymentFields = (transaction?.payment_fields as Record<string, unknown>) ?? {};
     const card = (transaction?.card as Record<string, unknown>) ?? {};
+    const operatorProductCode = this.readString(paymentFields, 'primary_product_name');
     return {
-      cardBrand: this.readString(card, 'brand') ?? this.readString(paymentFields, 'primary_product_name'),
+      cardBrand: this.readString(card, 'brand'),
+      confirmedModality: mapOperatorProductToModality(operatorProductCode),
+      operatorProductCode,
       installments: this.readNumber(paymentFields, 'number_of_quotas'),
       nsu: this.readString(transaction, 'number'),
       authorizationCode: this.readString(transaction, 'authorization_code'),

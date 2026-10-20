@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { finishCadastroSave, requestCadastroContinue, useCadastroListRefresh, type CadastroSaveIntent } from "@/components/app-shell/cadastro-save-navigation";
 import { useWorkspaceManager, useWorkspaceRegistration, useWorkspaceScopedState } from "@/components/app-shell/workspace-manager";
 import { useWorkspacePane, useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane";
 import { HoverPeek } from "@/components/ui/hover-peek";
@@ -112,6 +113,8 @@ export function ProductPricesWorkspace() {
     return () => window.clearTimeout(timeoutId);
   }, [isActivePane, loadRecords, session?.tenantId]);
 
+  useCadastroListRefresh("/prices", isListWorkspace, loadRecords);
+
   const openCreateWorkspace = useCallback(
     (name?: string) => {
       const params = new URLSearchParams();
@@ -156,6 +159,14 @@ export function ProductPricesWorkspace() {
     }, 0);
   }, [closeWorkspace, currentTabId, isMobile, navigateWithinWorkspace, openWorkspaceInNewTab]);
 
+  function finishPriceSave(intent: CadastroSaveIntent) {
+    finishCadastroSave(intent, { currentTabId, isMobile, closeWorkspace }, {
+      listPath: "/prices",
+      openCreate: () => openCreateWorkspace(),
+      navigateToList: () => navigateWithinWorkspace("/prices"),
+    });
+  }
+
   useEffect(() => {
     if (workspaceMode !== "new") {
       return;
@@ -183,7 +194,7 @@ export function ProductPricesWorkspace() {
     });
   }, [focusRecordId, records, setForm, workspaceMode]);
 
-  async function handleCreate(event: FormEvent) {
+  async function handleCreate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     const minutes = Number(form.estimatedMinutes);
     const price = Number(form.suggestedPrice.replace(/\./g, "").replace(",", "."));
@@ -202,7 +213,7 @@ export function ProductPricesWorkspace() {
       });
       setRecords((current) => [created, ...current.filter((item) => item.id !== created.id)]);
       setMessage(`Preço de ${created.productName} + ${created.serviceName} cadastrado.`);
-      closeFormWorkspace();
+      finishPriceSave(intent);
     } catch (error) {
       setMessage(describeWorkspaceError(error, "O preço não pôde ser cadastrado."));
     } finally {
@@ -210,7 +221,7 @@ export function ProductPricesWorkspace() {
     }
   }
 
-  async function handleUpdate(event: FormEvent) {
+  async function handleUpdate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!activeRecord) {
       return;
@@ -226,7 +237,7 @@ export function ProductPricesWorkspace() {
       });
       setRecords((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setMessage("Preço atualizado.");
-      closeFormWorkspace();
+      finishPriceSave(intent);
     } catch (error) {
       setMessage(describeWorkspaceError(error, "O preço não pôde ser atualizado."));
     } finally {
@@ -434,7 +445,17 @@ export function ProductPricesWorkspace() {
               <p className="table-subtle">O tempo é cadastro para o PCP. Não altera Normal, Expresso ou Urgente.</p>
               <div className="button-row">
                 <button className="button" disabled={saving} type="submit">
-                  {saving ? "Salvando…" : "Salvar"}
+                  {saving ? "Gravando…" : "Gravar"}
+                </button>
+                <button
+                  className="button-secondary"
+                  disabled={saving}
+                  onClick={(event) => {
+                    requestCadastroContinue(event, workspaceMode === "new" ? handleCreate : handleUpdate);
+                  }}
+                  type="button"
+                >
+                  {saving ? "Gravando…" : "Gravar e Continuar"}
                 </button>
                 <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                   Cancelar

@@ -3,6 +3,7 @@
 import type { ComponentType, ReactNode } from "react";
 import { AccessWorkspace } from "@/components/admin/access-workspace";
 import { BranchesWorkspace } from "@/components/admin/branches-workspace";
+import { WorkGroupsWorkspace } from "@/components/admin/work-groups-workspace";
 import { CompaniesWorkspace } from "@/components/admin/companies-workspace";
 import { EmpresasWorkspace } from "@/components/admin/empresas-workspace";
 import { DashboardWorkspace } from "@/components/app-shell/dashboard-workspace";
@@ -14,6 +15,9 @@ import { AtelierCatalogWorkspace } from "@/components/catalog/atelier-catalog-wo
 import { MinuteRatesWorkspace } from "@/components/catalog/minute-rates-workspace";
 import { ProductPricesWorkspace } from "@/components/catalog/product-prices-workspace";
 import { MeasurementMasterDataWorkspace } from "@/components/measurements/measurement-master-data-workspace";
+import { FloorCollaboratorsWorkspace } from "@/components/production/floor-collaborators-workspace";
+import { FloorGradeWorkspace } from "@/components/production/floor-grade-workspace";
+import { FloorTodayWorkspace } from "@/components/production/floor-today-workspace";
 import { PickBagWorkspace } from "@/components/production/pick-bag-workspace";
 import { QualityWorkspace } from "@/components/quality/quality-workspace";
 import { ServiceOrdersWorkspace } from "@/components/service-orders/service-orders-workspace";
@@ -63,6 +67,7 @@ const workspaceScreens: Record<string, ComponentType> = {
   "/admin/companies": EmpresasWorkspace,
   "/admin/branches": BranchesWorkspace,
   "/admin/access": AccessWorkspaceScreen,
+  "/admin/work-groups": WorkGroupsWorkspace,
   "/customers": CustomerWorkspace,
   "/body-parts": BodyPartsWorkspaceScreen,
   "/measurement-units": MeasurementUnitsWorkspaceScreen,
@@ -74,6 +79,9 @@ const workspaceScreens: Record<string, ComponentType> = {
   "/settings/payments/terminals": PaymentTerminalsWorkspaceScreen,
   "/service-orders": ServiceOrdersWorkspace,
   "/pick-bag": PickBagWorkspace,
+  "/floor-collaborators": FloorCollaboratorsWorkspace,
+  "/floor-schedule": FloorGradeWorkspace,
+  "/floor-today": FloorTodayWorkspace,
   "/quality": QualityWorkspace,
 };
 

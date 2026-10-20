@@ -4,6 +4,7 @@ export interface PaymentProviderInitiationRequest {
   provider: PaymentProviderName;
   referenceNo: string;
   paymentMethod: PaymentMethod;
+  informedModality?: string | null;
   amount: number;
   serviceOrderId: string;
   credentials: Record<string, string>;
@@ -24,6 +25,8 @@ export interface PaymentProviderAuthorizationResult {
   nsu?: string | null;
   authorizationCode?: string | null;
   acquirerTransactionId?: string | null;
+  confirmedModality?: string | null;
+  operatorProductCode?: string | null;
 }
 
 export interface PaymentProviderSettlementResult {
@@ -38,6 +41,8 @@ export interface PaymentProviderSettlementResult {
   nsu?: string | null;
   authorizationCode?: string | null;
   acquirerTransactionId?: string | null;
+  confirmedModality?: string | null;
+  operatorProductCode?: string | null;
 }
 
 export interface PaymentProviderAdapter {
@@ -47,4 +52,8 @@ export interface PaymentProviderAdapter {
     referenceNo: string,
     options?: { credentials?: Record<string, string>; environment?: string },
   ): Promise<PaymentProviderSettlementResult>;
+  cancelOrder?(
+    orderId: string,
+    options?: { credentials?: Record<string, string>; environment?: string },
+  ): Promise<void>;
 }

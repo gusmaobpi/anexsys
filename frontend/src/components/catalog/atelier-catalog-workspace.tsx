@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { finishCadastroSave, requestCadastroContinue, useCadastroListRefresh, type CadastroSaveIntent } from "@/components/app-shell/cadastro-save-navigation";
 import { useWorkspaceManager, useWorkspaceRegistration, useWorkspaceScopedState } from "@/components/app-shell/workspace-manager";
 import { useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
@@ -144,6 +145,8 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
     return () => window.clearTimeout(timeoutId);
   }, [loadRecords]);
 
+  useCadastroListRefresh(basePath, isListWorkspace, loadRecords);
+
   const clearDuplicate = useCallback(() => {
     setDuplicateStatus("idle");
     setDuplicateMatch(null);
@@ -205,6 +208,14 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
       closeWorkspace(closingTabId);
     }, 0);
   }, [basePath, closeWorkspace, config.title, currentTabId, isMobile, navigateWithinWorkspace, openWorkspaceInNewTab]);
+
+  function finishCatalogSave(intent: CadastroSaveIntent) {
+    finishCadastroSave(intent, { currentTabId, isMobile, closeWorkspace }, {
+      listPath: basePath,
+      openCreate: () => openCreateWorkspace(),
+      navigateToList: () => navigateWithinWorkspace(basePath),
+    });
+  }
 
   const handleInactivateRecord = useCallback(
     async (record: AtelierCatalogRecord) => {
@@ -333,7 +344,7 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
     clearDuplicate();
   }, [clearDuplicate, focusRecordId, records, setForm, workspaceMode]);
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  async function handleCreate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWrite) return;
     if (duplicateStatus !== "idle") {
@@ -360,13 +371,8 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
       setRecords((current) =>
         [...current, mapped].sort((left, right) => left.sortOrder - right.sortOrder || left.displayName.localeCompare(right.displayName)),
       );
-      setForm({
-        displayName: mapped.displayName,
-        defaultPrice: mapped.defaultPrice ?? "",
-        sortOrder: String(mapped.sortOrder),
-      });
-      navigateWithinWorkspace(`${basePath}?focusRecordId=${encodeURIComponent(mapped.id)}`);
       setMessage(mode === "products" ? "Produto criado." : "Serviço criado.");
+      finishCatalogSave(intent);
     } catch (error) {
       setMessage(describeWorkspaceError(error, `O ${config.entityLabel} não pôde ser criado.`));
     } finally {
@@ -374,7 +380,7 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
     }
   }
 
-  async function handleUpdate(event: FormEvent<HTMLFormElement>) {
+  async function handleUpdate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWrite || !activeRecord) return;
     if (duplicateStatus !== "idle") {
@@ -399,12 +405,8 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
       });
       const mapped = toListRecord(updated);
       setRecords((current) => current.map((record) => (record.id === mapped.id ? mapped : record)));
-      setForm({
-        displayName: mapped.displayName,
-        defaultPrice: mapped.defaultPrice ?? "",
-        sortOrder: String(mapped.sortOrder),
-      });
       setMessage(mode === "products" ? "Produto atualizado." : "Serviço atualizado.");
+      finishCatalogSave(intent);
     } catch (error) {
       setMessage(describeWorkspaceError(error, `O ${config.entityLabel} não pôde ser atualizado.`));
     } finally {
@@ -549,7 +551,17 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
               </label>
               <div className="button-row">
                 <button className="button" disabled={saving || duplicateStatus !== "idle"} type="submit">
-                  {saving ? "Salvando…" : workspaceMode === "new" ? "Salvar" : "Salvar alterações"}
+                  {saving ? "Gravando…" : "Gravar"}
+                </button>
+                <button
+                  className="button-secondary"
+                  disabled={saving || duplicateStatus !== "idle"}
+                  onClick={(event) => {
+                    requestCadastroContinue(event, workspaceMode === "new" ? handleCreate : handleUpdate);
+                  }}
+                  type="button"
+                >
+                  {saving ? "Gravando…" : "Gravar e Continuar"}
                 </button>
                 <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                   Cancelar

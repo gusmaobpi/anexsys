@@ -65,6 +65,7 @@ import {
 import {
   osGroupPaymentFromMembers,
   osHasPendingProcessSibling,
+  isCounterFinancialChild,
   osPayLockedOnParent,
 } from './service-order-finance';
 import { publicCustomerFirstName, publicOsStatusLabel } from './service-order-public';
@@ -324,16 +325,15 @@ export class ServiceOrderService {
       membersByGroup.set(groupId, current);
     }
     const memberIds = [...new Set((siblings.length > 0 ? siblings : orders).map((order) => order.id))];
-    const paidById = await this.readPaidByOrderIds(memberIds);
+    const [paidById, heldById] = await Promise.all([this.readPaidByOrderIds(memberIds), this.readHeldByOrderIds(memberIds)]);
     return orders.map((order) => {
       const members = membersByGroup.get(order.groupId ?? order.id) ?? [order];
-      const finance = osGroupPaymentFromMembers(members, paidById);
+      const finance = isCounterFinancialChild(order)
+        ? { amountPaid: '0.00', outstandingBalance: '0.00', paymentStatus: 'paid' as const }
+        : osGroupPaymentFromMembers(members, paidById, heldById);
       return Object.assign(order, {
         hasAttachments: withPhoto.has(order.id),
-        payLockedOnParent: osPayLockedOnParent({
-          isProcessRow: isProcessRow(order),
-          hasPendingProcessSibling: osHasPendingProcessSibling(order.id, members),
-        }),
+        payLockedOnParent: osPayLockedOnParent(order),
         ...finance,
       });
     });
@@ -430,10 +430,7 @@ export class ServiceOrderService {
       serviceOrder.status === ServiceOrderStatus.PICKED_UP && serviceOrder.actualPickupDate
         ? buildClientReturnPreview(serviceOrder.actualPickupDate, adjustmentPeriodDays, executionPeriodDays)
         : null;
-    const payLockedOnParent = osPayLockedOnParent({
-      isProcessRow: isProcessRow(serviceOrder),
-      hasPendingProcessSibling: osHasPendingProcessSibling(serviceOrder.id, groupVersions),
-    });
+    const payLockedOnParent = osPayLockedOnParent(serviceOrder);
 
     return {
       serviceOrder: Object.assign(serviceOrder, { payLockedOnParent }),
@@ -502,7 +499,7 @@ export class ServiceOrderService {
         recebiReady: Boolean(pickup?.recebiReady),
         pickedUp: serviceOrder.status === ServiceOrderStatus.PICKED_UP,
         pickupMethod: pickup?.method ?? null,
-        paymentLabel: 'Pagar na retirada',
+        paymentLabel: await this.readPublicPaymentLabel(serviceOrder),
       };
     });
   }
@@ -1115,12 +1112,17 @@ export class ServiceOrderService {
         tenantId,
         serviceOrder.branchId,
         serviceOrder.id,
+        actorUserId,
       );
       if (busy[0]) {
         throw new DomainValidationError(
           `Já existe uma sacola em produção (${busy[0].orderNo}). Termine ela antes de pegar outra.`,
         );
       }
+      serviceOrder.floorHolderUserId = actorUserId;
+    }
+    if (action === 'finish_production' || action === 'finish_rework') {
+      serviceOrder.floorHolderUserId = null;
     }
 
     serviceOrder.status = floorActionResultStatus(action);
@@ -1136,7 +1138,26 @@ export class ServiceOrderService {
       eventType: 'service_order.workflow',
       metadata: { status: saved.status, floorAction: action },
     });
+    await this.recordFloorDiary(saved, actorUserId, action);
     return this.getDetails(tenantId, saved.id);
+  }
+
+  private async recordFloorDiary(order: ServiceOrderEntity, actorUserId: string, action: string) {
+    if (!['pick_up', 'finish_production', 'pick_up_rework', 'finish_rework'].includes(action)) {
+      return;
+    }
+    if (typeof this.dataSource.query !== 'function') {
+      return;
+    }
+    try {
+      await this.dataSource.query(
+        `INSERT INTO floor_diary_entries (id, tenant_id, branch_id, user_id, service_order_id, order_no, action, happened_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, now())`,
+        [randomUUID(), order.tenantId, order.branchId, actorUserId, order.id, order.orderNo, action],
+      );
+    } catch {
+      // O passo da OS já foi gravado. O diário não pode desfazer a sacola.
+    }
   }
 
   async applyQualityStatus(
@@ -1155,6 +1176,9 @@ export class ServiceOrderService {
     serviceOrder.status = status;
     serviceOrder.updatedBy = actorUserId;
     const saved = await this.serviceOrderRepository.save(serviceOrder);
+    if (status === ServiceOrderStatus.READY_FOR_PICKUP) {
+      await this.releaseCounterHeldItems(saved, actorUserId);
+    }
     await this.auditService.record({
       tenantId,
       branchId: saved.branchId,
@@ -1166,6 +1190,28 @@ export class ServiceOrderService {
       metadata: { status: saved.status },
     });
     return saved;
+  }
+
+  private async releaseCounterHeldItems(serviceOrder: ServiceOrderEntity, actorUserId: string) {
+    if (!isCounterFinancialChild(serviceOrder) || !serviceOrder.originServiceOrderId) {
+      return;
+    }
+    const childItems = await this.serviceOrderItemRepository.findByServiceOrder(serviceOrder.id);
+    const originIds = new Set(
+      childItems.map((item) => item.originServiceOrderItemId).filter((itemId): itemId is string => Boolean(itemId)),
+    );
+    if (originIds.size === 0) {
+      return;
+    }
+    const originItems = await this.serviceOrderItemRepository.findByServiceOrder(serviceOrder.originServiceOrderId);
+    for (const item of originItems) {
+      if (!originIds.has(item.id) || !item.heldForRework) {
+        continue;
+      }
+      item.heldForRework = false;
+      item.updatedBy = actorUserId;
+      await this.serviceOrderItemRepository.save(item);
+    }
   }
 
   async sendToProof(tenantId: string, serviceOrderId: string, actorUserId: string) {
@@ -1204,6 +1250,7 @@ export class ServiceOrderService {
         tenantId,
         serviceOrder.branchId,
         serviceOrder.id,
+        actorUserId,
       );
       if (busy[0]) {
         throw new DomainValidationError(
@@ -1461,6 +1508,38 @@ export class ServiceOrderService {
     };
   }
 
+  private async readPublicPaymentLabel(serviceOrder: ServiceOrderEntity): Promise<string> {
+    if (typeof this.dataSource?.query !== 'function') {
+      return Number(serviceOrder.totalValue ?? 0) > 0 ? 'Saldo em aberto' : 'Pago';
+    }
+    const outstanding = await this.readOutstandingBalance(serviceOrder);
+    return outstanding > 0 ? 'Saldo em aberto' : 'Pago';
+  }
+
+  private async readHeldByOrderIds(orderIds: string[]): Promise<Map<string, number>> {
+    const heldById = new Map<string, number>();
+    if (orderIds.length === 0 || typeof this.dataSource?.query !== 'function') {
+      return heldById;
+    }
+    const placeholders = orderIds.map((_, index) => `$${index + 1}`).join(', ');
+    const rows = (await this.dataSource.query(
+      `SELECT service_order_id AS id,
+              COALESCE(SUM(GREATEST(quantity * COALESCE(unit_price, 0) - COALESCE(discount_value, 0), 0)), 0) AS held
+       FROM service_order_items
+       WHERE held_for_rework = true
+         AND is_deleted = false
+         AND service_order_id IN (${placeholders})
+       GROUP BY service_order_id`,
+      orderIds,
+    )) as Array<{ id?: string; held?: string | number }>;
+    for (const row of rows) {
+      if (row.id) {
+        heldById.set(row.id, Number(row.held ?? 0));
+      }
+    }
+    return heldById;
+  }
+
   private async readPaidByOrderIds(orderIds: string[]): Promise<Map<string, number>> {
     const paidById = new Map<string, number>();
     if (orderIds.length === 0 || typeof this.dataSource?.query !== 'function') {
@@ -1469,7 +1548,7 @@ export class ServiceOrderService {
     const placeholders = orderIds.map((_, index) => `$${index + 1}`).join(', ');
     const rows = (await this.dataSource.query(
       `SELECT service_order_id AS id, COALESCE(SUM(CASE
-          WHEN status IN ('failed', 'reversed') THEN 0
+          WHEN status IN ('failed', 'reversed', 'pending', 'canceled') THEN 0
           WHEN payment_direction = 'outbound' THEN -payment_amount
           ELSE payment_amount
         END), 0) AS paid
@@ -1502,17 +1581,39 @@ export class ServiceOrderService {
       return 0;
     }
     const rows = (await this.dataSource.query(
-      `SELECT COALESCE(SUM(CASE
-          WHEN status IN ('failed', 'reversed') THEN 0
-          WHEN payment_direction = 'outbound' THEN -payment_amount
-          ELSE payment_amount
-        END), 0) AS paid
-       FROM payment_records
-       WHERE service_order_id = $1`,
+      `SELECT
+         COALESCE((
+           SELECT SUM(COALESCE(member.total_value, 0))
+           FROM service_orders AS member
+           WHERE member.is_deleted = false
+             AND (member.id = origin.id OR member.group_id = COALESCE(origin.group_id, origin.id))
+         ), 0) AS total,
+         COALESCE((
+           SELECT SUM(GREATEST(item.quantity * COALESCE(item.unit_price, 0) - COALESCE(item.discount_value, 0), 0))
+           FROM service_order_items AS item
+           INNER JOIN service_orders AS member ON member.id = item.service_order_id
+           WHERE item.held_for_rework = true
+             AND item.is_deleted = false
+             AND member.is_deleted = false
+             AND (member.id = origin.id OR member.group_id = COALESCE(origin.group_id, origin.id))
+         ), 0) AS held,
+         COALESCE((
+           SELECT SUM(CASE
+             WHEN payment.status IN ('failed', 'reversed', 'pending', 'canceled') THEN 0
+             WHEN payment.payment_direction = 'outbound' THEN -payment.payment_amount
+             ELSE payment.payment_amount
+           END)
+           FROM payment_records AS payment
+           WHERE payment.billing_scope_id = COALESCE(origin.group_id, origin.id)
+         ), 0) AS paid
+       FROM service_orders AS origin
+       WHERE origin.id = $1`,
       [serviceOrder.id],
-    )) as Array<{ paid?: string | number }>;
+    )) as Array<{ total?: string | number; held?: string | number; paid?: string | number }>;
+    const total = Number(rows[0]?.total ?? serviceOrder.totalValue ?? 0);
+    const held = Number(rows[0]?.held ?? 0);
     const paid = Number(rows[0]?.paid ?? 0);
-    return Math.max(Number(serviceOrder.totalValue ?? 0) - paid, 0);
+    return Math.max(Number((total - held - paid).toFixed(2)), 0);
   }
 
   private async findLatestPickup(serviceOrderId: string) {

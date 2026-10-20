@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { branchesOfEmpresa, empresaLabel } from "@/components/providers/session-context";
 import { useSession } from "@/components/providers/session-provider";
+import { consumeFloorReturn } from "@/components/production/floor-return";
 
 export default function SelectBranchPage() {
   const router = useRouter();
@@ -17,7 +18,7 @@ export default function SelectBranchPage() {
       return;
     }
     if (status === "authenticated" && session?.activeBranchId) {
-      router.replace("/dashboard");
+      router.replace(consumeFloorReturn() ?? "/dashboard");
     }
   }, [router, session?.activeBranchId, status]);
 
@@ -61,7 +62,7 @@ export default function SelectBranchPage() {
                       try {
                         const resolved = await selectCompany(company.tenantId);
                         if (resolved) {
-                          router.push("/dashboard");
+                          router.push(consumeFloorReturn() ?? "/dashboard");
                         }
                       } finally {
                         setPendingCompanyId(null);
@@ -122,7 +123,7 @@ export default function SelectBranchPage() {
                         setPendingBranchId(branch.id);
                         try {
                           if (await selectBranch(branch.id)) {
-                            router.push("/dashboard");
+                            router.push(consumeFloorReturn() ?? "/dashboard");
                           }
                         } finally {
                           setPendingBranchId(null);

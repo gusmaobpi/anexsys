@@ -1,5 +1,5 @@
 import { Column, Entity } from 'typeorm';
-import { PaymentDirection, PaymentMethod, PaymentProviderName, PaymentRecordStatus } from 'src/shared/domain/enums';
+import { PaymentDirection, PaymentMethod, PaymentModality, PaymentProviderName, PaymentRecordStatus } from 'src/shared/domain/enums';
 import { MutableBusinessEntity } from 'src/shared/persistence/base.entity';
 
 @Entity({ name: 'payment_records' })
@@ -12,6 +12,18 @@ export class PaymentRecordEntity extends MutableBusinessEntity {
 
   @Column({ name: 'service_order_id', type: 'uuid' })
   serviceOrderId!: string;
+
+  @Column({ name: 'billing_scope_id', type: 'uuid' })
+  billingScopeId!: string;
+
+  @Column({ name: 'informed_modality', type: 'varchar', length: 20, nullable: true })
+  informedModality!: PaymentModality | null;
+
+  @Column({ name: 'confirmed_modality', type: 'varchar', length: 20, nullable: true })
+  confirmedModality!: PaymentModality | null;
+
+  @Column({ name: 'operator_product_code', type: 'varchar', length: 80, nullable: true })
+  operatorProductCode!: string | null;
 
   @Column({ name: 'payment_reference_no', type: 'varchar', length: 50, nullable: true })
   paymentReferenceNo!: string | null;
@@ -54,4 +66,16 @@ export class PaymentRecordEntity extends MutableBusinessEntity {
 
   @Column({ name: 'status', type: 'varchar', length: 30 })
   status!: PaymentRecordStatus;
+
+  @Column({ name: 'manual_reason', type: 'varchar', length: 200, nullable: true })
+  manualReason!: string | null;
+
+  @Column({ name: 'reversal_reason', type: 'varchar', length: 200, nullable: true })
+  reversalReason!: string | null;
+
+  @Column({ name: 'reversed_at', type: 'timestamptz', nullable: true })
+  reversedAt!: Date | null;
+
+  @Column({ name: 'reversed_by', type: 'uuid', nullable: true })
+  reversedBy!: string | null;
 }

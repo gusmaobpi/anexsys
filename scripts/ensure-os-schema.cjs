@@ -347,6 +347,71 @@ async function main() {
       ADD COLUMN IF NOT EXISTS acquirer_transaction_id varchar(80)
     `);
     await client.query(`
+      DO $$
+      BEGIN
+        IF to_regclass('public.payment_records') IS NULL THEN
+          RETURN;
+        END IF;
+
+        ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS billing_scope_id uuid;
+        ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS informed_modality varchar(20);
+        ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS confirmed_modality varchar(20);
+        ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS operator_product_code varchar(80);
+
+        UPDATE service_orders
+        SET group_id = id
+        WHERE group_id IS NULL;
+
+        UPDATE payment_records AS payments
+        SET billing_scope_id = COALESCE(orders.group_id, payments.service_order_id)
+        FROM service_orders AS orders
+        WHERE orders.id = payments.service_order_id
+          AND payments.billing_scope_id IS NULL;
+
+        UPDATE payment_records
+        SET billing_scope_id = service_order_id
+        WHERE billing_scope_id IS NULL;
+
+        ALTER TABLE payment_records ALTER COLUMN billing_scope_id SET NOT NULL;
+
+        ALTER TABLE payment_records DROP CONSTRAINT IF EXISTS chk_payment_records_informed_modality;
+        ALTER TABLE payment_records
+        ADD CONSTRAINT chk_payment_records_informed_modality
+        CHECK (
+          informed_modality IS NULL
+          OR (
+            payment_method = 'card'
+            AND informed_modality IN ('credit', 'debit', 'pix', 'voucher')
+          )
+        );
+
+        ALTER TABLE payment_records DROP CONSTRAINT IF EXISTS chk_payment_records_confirmed_modality;
+        ALTER TABLE payment_records
+        ADD CONSTRAINT chk_payment_records_confirmed_modality
+        CHECK (
+          confirmed_modality IS NULL
+          OR (
+            payment_method = 'card'
+            AND confirmed_modality IN ('credit', 'debit', 'pix', 'voucher')
+          )
+        );
+
+        IF EXISTS (
+          SELECT 1
+          FROM payment_records
+          WHERE status = 'pending'
+          GROUP BY billing_scope_id
+          HAVING COUNT(*) > 1
+        ) THEN
+          RAISE EXCEPTION 'payment_records already has more than one pending charge for the same billing_scope_id';
+        END IF;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_records_one_pending_scope
+        ON payment_records (billing_scope_id)
+        WHERE status = 'pending';
+      END $$
+    `);
+    await client.query(`
       ALTER TABLE IF EXISTS service_orders
       ADD COLUMN IF NOT EXISTS public_token uuid
     `);

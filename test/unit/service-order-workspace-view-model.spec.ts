@@ -6,6 +6,9 @@ import {
   buildServiceOrderItemMutationPlan,
   calculateServiceOrderItemSubtotal,
   canAddServiceOrderItemGridRow,
+  createEmptyServiceOrderItemGridRow,
+  isNavigationBlankServiceOrderItemRow,
+  validateServiceOrderItemGrid,
   applyOsMoneyTyping,
   applyTimePricingToUnitPrice,
   formatOsMoneyInput,
@@ -239,6 +242,41 @@ test('does not emit updates for numerically equivalent values', () => {
   });
 });
 
+test('discards a navigation blank row and still requires a real piece', () => {
+  const filled = updateServiceOrderItemGridRow(addServiceOrderItemGridRow([]), 'draft-1', {
+    itemType: 'Calça',
+    productId: 'product-1',
+    serviceId: 'service-1',
+    description: 'Bainha',
+    brand: 'Levi',
+    quantity: '1',
+    unitPrice: '40',
+    discountValue: '0',
+  });
+  const withBlank = addServiceOrderItemGridRow(filled);
+  const blank = withBlank[withBlank.length - 1];
+
+  assert.equal(isNavigationBlankServiceOrderItemRow(blank), true);
+  assert.equal(validateServiceOrderItemGrid(withBlank, { requireAtLeastOne: true, maxItems: 5 }), null);
+  assert.equal(buildCreateServiceOrderItemsPayload(withBlank).length, 1);
+  assert.equal(buildServiceOrderItemMutationPlan(withBlank, []).create.length, 1);
+
+  const onlyBlank = [createEmptyServiceOrderItemGridRow(1)];
+  assert.equal(
+    validateServiceOrderItemGrid(onlyBlank, { requireAtLeastOne: true, maxItems: 5 }),
+    'Inclua pelo menos uma peça antes de salvar a OS.',
+  );
+  assert.equal(validateServiceOrderItemGrid(onlyBlank, { requireAtLeastOne: false, maxItems: 5 }), null);
+  assert.deepEqual(buildCreateServiceOrderItemsPayload(onlyBlank), []);
+
+  const partial = updateServiceOrderItemGridRow(onlyBlank, 'draft-1', { complement: 'Barra' });
+  assert.equal(isNavigationBlankServiceOrderItemRow(partial[0]), false);
+  assert.equal(
+    validateServiceOrderItemGrid(partial, { requireAtLeastOne: true, maxItems: 5 }),
+    'Cada peça precisa de produto e serviço antes de salvar.',
+  );
+});
+
 test('caps the visible piece count at five and calculates the line subtotal', () => {
   let rows = addServiceOrderItemGridRow([]);
   for (let index = 0; index < MAX_SERVICE_ORDER_ITEMS + 2; index += 1) {
@@ -302,9 +340,9 @@ test('does not spawn a version when the next-version mark is off', async () => {
 
 test('labels payment as paid only when the OS is fully settled', () => {
   assert.equal(osPaymentConditionLabel('paid'), 'Pago');
-  assert.equal(osPaymentConditionLabel('partial'), 'Pagar na retirada');
-  assert.equal(osPaymentConditionLabel('pending'), 'Pagar na retirada');
-  assert.equal(osPaymentConditionLabel(null), 'Pagar na retirada');
+  assert.equal(osPaymentConditionLabel('partial'), 'Saldo em aberto');
+  assert.equal(osPaymentConditionLabel('pending'), 'Saldo em aberto');
+  assert.equal(osPaymentConditionLabel(null), 'Saldo em aberto');
 });
 
 test('uses Reconserto or Em garantia on the OP header for in-window returns', () => {
@@ -385,7 +423,7 @@ test('does not rebind the open OS when the list refreshes without a preferred id
   assert.deepEqual(serviceOrderListLoadBinding('os-1'), { bind: true, activeId: 'os-1' });
 });
 
-test('keeps Detalhamento do ajuste within the A5 15px / 3-line budget after column S', () => {
+test('keeps Detalhar o serviço within the A5 15px / 3-line budget after column S', () => {
   assert.equal(OS_WORK_PRINT_FONT_PX, 15);
   assert.equal(OS_WORK_PRINT_LINES, 3);
   assert.equal(OS_WORK_CHARS_PER_LINE, 34);

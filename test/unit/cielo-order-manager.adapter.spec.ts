@@ -94,6 +94,27 @@ describe('CieloOrderManagerAdapter', () => {
     assert.equal(calls[2].init?.method, 'GET');
   });
 
+  it('sends the chosen payment code so the Cielo Smart opens on it', async () => {
+    const adapter = new CieloOrderManagerAdapter(new PaymentProviderRegistry());
+    const cases = [
+      { informedModality: 'credit', payment_code: 'CREDITO_AVISTA', installments: 0 },
+      { informedModality: 'debit', payment_code: 'DEBITO_AVISTA', installments: 0 },
+      { informedModality: 'pix', payment_code: 'PIX' },
+    ];
+
+    for (const item of cases) {
+      const calls = mockFetchSequence([
+        { payload: { id: 'order-1' } },
+        { payload: {} },
+        { payload: { id: 'order-1', status: 'PLACED' } },
+      ]);
+      await adapter.initiatePayment(buildRequest({ informedModality: item.informedModality }));
+      const body = JSON.parse(String(calls[0].init?.body));
+      assert.equal(body.payment_code, item.payment_code);
+      assert.equal(body.installments, item.installments);
+    }
+  });
+
   it('marks the charge as awaiting the terminal when the order is placed', async () => {
     mockFetchSequence([{ payload: { id: 'order-1' } }, { payload: {} }, { payload: { id: 'order-1', status: 'PLACED' } }]);
     const adapter = new CieloOrderManagerAdapter(new PaymentProviderRegistry());
@@ -142,6 +163,8 @@ describe('CieloOrderManagerAdapter', () => {
     assert.equal(result.settled, true);
     assert.equal(result.receivedAmount, 60);
     assert.equal(result.cardBrand, 'VISA');
+    assert.equal(result.confirmedModality, 'credit');
+    assert.equal(result.operatorProductCode, 'CREDIT');
     assert.equal(result.nsu, '672836');
     assert.equal(result.authorizationCode, '008619');
     assert.equal(result.installments, 0);
@@ -177,6 +200,22 @@ describe('CieloOrderManagerAdapter', () => {
     assert.equal(body.status, 'CONFIRMED');
     assert.equal(body.transaction_type, 'PAYMENT');
     assert.equal(body.amount, 6000);
+    assert.equal(body.paymentFields.primaryProductName, 'CREDIT');
+    assert.equal(body.card.brand, 'VISA');
+    assert.equal(body.payment_fields, undefined);
+  });
+
+  it('closes the Cielo order when the attendant cancels the charge', async () => {
+    const calls = mockFetchSequence([{ payload: {} }]);
+    const adapter = new CieloOrderManagerAdapter(new PaymentProviderRegistry());
+
+    await adapter.cancelOrder('order-1', {
+      credentials: { clientId: 'client-1', accessToken: 'token-1', merchantId: 'merchant-1' },
+      environment: 'sandbox',
+    });
+
+    assert.equal(calls[0].url, `${CIELO_SANDBOX_BASE_URL}/orders/order-1?operation=CLOSE`);
+    assert.equal(calls[0].init?.method, 'PUT');
   });
 
   it('rejects the simulation in production', async () => {

@@ -37,6 +37,7 @@ export class ServiceOrderClientReturn1760000031000 implements MigrationInterface
         'approved',
         'cancelled',
         'in_production',
+        'awaiting_proof',
         'awaiting_quality',
         'quality',
         'in_rework',

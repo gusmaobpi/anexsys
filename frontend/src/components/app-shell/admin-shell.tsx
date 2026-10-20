@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { ActiveContextCombos } from "@/components/app-shell/active-context-combos";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
 import { RoleAwareNav } from "@/components/app-shell/role-aware-nav";
@@ -10,8 +11,12 @@ import { useSession } from "@/components/providers/session-provider";
 
 export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   const { session, logout, errorMessage, clearError } = useSession();
+  const pathname = usePathname();
   const { isDesktop, isMobile } = useWorkspaceViewportMode();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  if (pathname.startsWith("/floor/")) {
+    return <main className="floor-phone">{children}</main>;
+  }
   const sidebarVisible = isDesktop || sidebarOpen;
 
   return (

@@ -99,4 +99,7 @@ export class ServiceOrderEntity extends SoftDeletableBusinessEntity {
 
   @Column({ name: 'discount_value', type: 'numeric', precision: 18, scale: 2, nullable: true })
   discountValue!: string | null;
+
+  @Column({ name: 'floor_holder_user_id', type: 'uuid', nullable: true })
+  floorHolderUserId!: string | null;
 }

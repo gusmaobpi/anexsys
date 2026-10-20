@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { applyFilialListFilters, buildFilialExcelCsv, filialStatusLabel } from "@/components/admin/filial-list";
+import { finishCadastroSave, requestCadastroContinue, useCadastroListRefresh, type CadastroSaveIntent } from "@/components/app-shell/cadastro-save-navigation";
 import { useWorkspaceManager, useWorkspaceRegistration, useWorkspaceScopedState } from "@/components/app-shell/workspace-manager";
 import { useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
@@ -143,6 +144,8 @@ export function BranchesWorkspace() {
     return () => window.clearTimeout(timeoutId);
   }, [loadBranches]);
 
+  useCadastroListRefresh("/admin/branches", isListWorkspace, loadBranches);
+
   const openCreateForm = useCallback(
     (name?: string) => {
       setShowCreateForm(true);
@@ -202,6 +205,14 @@ export function BranchesWorkspace() {
     }, 0);
   }, [closeWorkspace, currentTabId, isMobile, navigateWithinWorkspace, openWorkspaceInNewTab]);
 
+  function finishBranchSave(intent: CadastroSaveIntent) {
+    finishCadastroSave(intent, { currentTabId, isMobile, closeWorkspace }, {
+      listPath: "/admin/branches",
+      openCreate: () => openCreateWorkspace(),
+      navigateToList: () => navigateWithinWorkspace("/admin/branches"),
+    });
+  }
+
   useEffect(() => {
     if (workspaceMode !== "new") {
       return;
@@ -234,7 +245,7 @@ export function BranchesWorkspace() {
     setActiveBranchId(null);
   }, [isListWorkspace, setActiveBranchId, setShowCreateForm]);
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  async function handleCreate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWrite) return;
     setSaving(true);
@@ -252,11 +263,8 @@ export function BranchesWorkspace() {
         }),
       });
       setBranches((current) => [...current, created].sort((left, right) => left.displayName.localeCompare(right.displayName)));
-      setActiveBranchId(created.id);
-      setForm(mapBranchToForm(created));
-      setShowCreateForm(false);
-      navigateWithinWorkspace(`/admin/branches?focusBranchId=${encodeURIComponent(created.id)}`);
       setMessage("Filial criada com sucesso.");
+      finishBranchSave(intent);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "A filial não pôde ser criada.");
     } finally {
@@ -264,7 +272,7 @@ export function BranchesWorkspace() {
     }
   }
 
-  async function handleUpdate(event: FormEvent<HTMLFormElement>) {
+  async function handleUpdate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWrite || !activeBranch) return;
     setSaving(true);
@@ -282,8 +290,8 @@ export function BranchesWorkspace() {
         }),
       });
       setBranches((current) => current.map((branch) => (branch.id === updated.id ? updated : branch)));
-      setForm(mapBranchToForm(updated));
       setMessage("Filial atualizada com sucesso.");
+      finishBranchSave(intent);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "A filial não pôde ser atualizada.");
     } finally {
@@ -442,7 +450,17 @@ export function BranchesWorkspace() {
                 <BranchFormFields empresas={empresas} form={form} setForm={setForm} />
                 <div className="button-row">
                   <button className="button" disabled={saving} type="submit">
-                    {saving ? "Salvando…" : "Salvar filial"}
+                    {saving ? "Gravando…" : "Gravar"}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    disabled={saving}
+                    onClick={(event) => {
+                      requestCadastroContinue(event, handleCreate);
+                    }}
+                    type="button"
+                  >
+                    {saving ? "Gravando…" : "Gravar e Continuar"}
                   </button>
                   <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                     Cancelar
@@ -471,7 +489,17 @@ export function BranchesWorkspace() {
                   <BranchFormFields empresas={empresas} form={form} setForm={setForm} />
                   <div className="button-row">
                     <button className="button" disabled={saving || !canWrite} type="submit">
-                      {saving ? "Salvando…" : "Salvar alterações"}
+                      {saving ? "Gravando…" : "Gravar"}
+                    </button>
+                    <button
+                      className="button-secondary"
+                      disabled={saving || !canWrite}
+                      onClick={(event) => {
+                        requestCadastroContinue(event, handleUpdate);
+                      }}
+                      type="button"
+                    >
+                      {saving ? "Gravando…" : "Gravar e Continuar"}
                     </button>
                     <button
                       className="button-secondary"

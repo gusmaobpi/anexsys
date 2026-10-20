@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { finishCadastroSave, requestCadastroContinue, useCadastroListRefresh, type CadastroSaveIntent } from "@/components/app-shell/cadastro-save-navigation";
 import { useWorkspaceManager, useWorkspaceRegistration, useWorkspaceScopedState } from "@/components/app-shell/workspace-manager";
 import { useWorkspacePane, useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
@@ -100,6 +101,8 @@ export function PaymentTerminalsWorkspace() {
     return () => window.clearTimeout(timeoutId);
   }, [isActivePane, loadRecords, session?.tenantId, activeBranchId]);
 
+  useCadastroListRefresh("/settings/payments/terminals", isListWorkspace, loadRecords);
+
   const openCreateWorkspace = useCallback(() => {
     const targetPath = "/settings/payments/terminals?workspaceMode=new";
     if (isMobile) {
@@ -136,6 +139,14 @@ export function PaymentTerminalsWorkspace() {
     }, 0);
   }, [closeWorkspace, currentTabId, isMobile, navigateWithinWorkspace, openWorkspaceInNewTab]);
 
+  function finishTerminalSave(intent: CadastroSaveIntent) {
+    finishCadastroSave(intent, { currentTabId, isMobile, closeWorkspace }, {
+      listPath: "/settings/payments/terminals",
+      openCreate: () => openCreateWorkspace(),
+      navigateToList: () => navigateWithinWorkspace("/settings/payments/terminals"),
+    });
+  }
+
   const goToProviders = useCallback(() => {
     navigateWithinWorkspace("/settings/payments");
   }, [navigateWithinWorkspace]);
@@ -167,7 +178,7 @@ export function PaymentTerminalsWorkspace() {
     });
   }, [focusRecordId, records, setForm, workspaceMode]);
 
-  async function handleCreate(event: FormEvent) {
+  async function handleCreate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!activeBranchId) {
       setMessage("Selecione uma filial no contexto para cadastrar o terminal.");
@@ -188,7 +199,7 @@ export function PaymentTerminalsWorkspace() {
       });
       setMessage("Terminal cadastrado.");
       await loadRecords();
-      closeFormWorkspace();
+      finishTerminalSave(intent);
     } catch (error) {
       setMessage(describeWorkspaceError(error, "O terminal não pôde ser cadastrado."));
     } finally {
@@ -196,7 +207,7 @@ export function PaymentTerminalsWorkspace() {
     }
   }
 
-  async function handleUpdate(event: FormEvent) {
+  async function handleUpdate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!activeRecord) {
       return;
@@ -215,7 +226,7 @@ export function PaymentTerminalsWorkspace() {
       });
       setMessage("Terminal atualizado.");
       await loadRecords();
-      closeFormWorkspace();
+      finishTerminalSave(intent);
     } catch (error) {
       setMessage(describeWorkspaceError(error, "O terminal não pôde ser atualizado."));
     } finally {
@@ -410,7 +421,17 @@ export function PaymentTerminalsWorkspace() {
               </p>
               <div className="button-row">
                 <button className="button" disabled={saving} type="submit">
-                  {saving ? "Salvando…" : "Salvar"}
+                  {saving ? "Gravando…" : "Gravar"}
+                </button>
+                <button
+                  className="button-secondary"
+                  disabled={saving}
+                  onClick={(event) => {
+                    requestCadastroContinue(event, workspaceMode === "new" ? handleCreate : handleUpdate);
+                  }}
+                  type="button"
+                >
+                  {saving ? "Gravando…" : "Gravar e Continuar"}
                 </button>
                 <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                   Cancelar

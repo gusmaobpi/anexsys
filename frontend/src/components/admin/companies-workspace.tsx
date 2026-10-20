@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { applyContaListFilters, buildContaExcelCsv, contaStatusLabel } from "@/components/admin/conta-list";
+import { finishCadastroSave, requestCadastroContinue, useCadastroListRefresh, type CadastroSaveIntent } from "@/components/app-shell/cadastro-save-navigation";
 import { useWorkspaceManager, useWorkspaceRegistration, useWorkspaceScopedState } from "@/components/app-shell/workspace-manager";
 import { useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
@@ -145,6 +146,8 @@ export function CompaniesWorkspace() {
     return () => window.clearTimeout(timeoutId);
   }, [loadCompanies]);
 
+  useCadastroListRefresh("/admin/tenants", isListWorkspace, loadCompanies);
+
   const openCreateForm = useCallback(
     (name?: string) => {
       setShowCreateForm(true);
@@ -199,6 +202,14 @@ export function CompaniesWorkspace() {
     }, 0);
   }, [closeWorkspace, currentTabId, isMobile, navigateWithinWorkspace, openWorkspaceInNewTab]);
 
+  function finishCompanySave(intent: CadastroSaveIntent) {
+    finishCadastroSave(intent, { currentTabId, isMobile, closeWorkspace }, {
+      listPath: "/admin/tenants",
+      openCreate: () => openCreateWorkspace(),
+      navigateToList: () => navigateWithinWorkspace("/admin/tenants"),
+    });
+  }
+
   useEffect(() => {
     if (workspaceMode !== "new") {
       return;
@@ -228,7 +239,7 @@ export function CompaniesWorkspace() {
     setActiveCompanyId(null);
   }, [isListWorkspace, setActiveCompanyId, setShowCreateForm]);
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  async function handleCreate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canCreate) return;
     if (companyDuplicateStatus !== "idle") {
@@ -252,11 +263,8 @@ export function CompaniesWorkspace() {
       });
       const created = normalizeCompanyRecord(createdResponse, companies.length);
       setCompanies((current) => [created, ...current]);
-      setActiveCompanyId(created.id);
-      setShowCreateForm(false);
-      setForm(mapCompanyToForm(created));
-      navigateWithinWorkspace(`/admin/tenants?focusTenantId=${encodeURIComponent(created.id)}`);
       setMessage("Conta criada. Empresa e Filial padrão nasceram juntas, com horário de funcionamento.");
+      finishCompanySave(intent);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "A empresa não pôde ser criada.");
     } finally {
@@ -264,7 +272,7 @@ export function CompaniesWorkspace() {
     }
   }
 
-  async function handleUpdate(event: FormEvent<HTMLFormElement>) {
+  async function handleUpdate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWrite || !activeCompany || activeCompany.id !== session?.tenantId) return;
     if (companyDuplicateStatus !== "idle") {
@@ -287,9 +295,8 @@ export function CompaniesWorkspace() {
       });
       const updated = normalizeCompanyRecord(updatedResponse, 0, { fallbackId: activeCompany.id });
       setCompanies((current) => current.map((company) => (company.id === activeCompany.id ? updated : company)));
-      setActiveCompanyId(activeCompany.id);
-      setForm(mapCompanyToForm(updated));
       setMessage("Empresa atualizada com sucesso.");
+      finishCompanySave(intent);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "A empresa não pôde ser atualizada.");
     } finally {
@@ -482,7 +489,17 @@ export function CompaniesWorkspace() {
                 />
                 <div className="button-row">
                   <button className="button" disabled={saving || companyDuplicateStatus !== "idle"} type="submit">
-                    {saving ? "Salvando…" : "Criar conta"}
+                    {saving ? "Gravando…" : "Gravar"}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    disabled={saving || companyDuplicateStatus !== "idle"}
+                    onClick={(event) => {
+                      requestCadastroContinue(event, handleCreate);
+                    }}
+                    type="button"
+                  >
+                    {saving ? "Gravando…" : "Gravar e Continuar"}
                   </button>
                   <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                     Cancelar
@@ -541,7 +558,17 @@ export function CompaniesWorkspace() {
                       disabled={saving || activeCompany.id !== session?.tenantId || !canWrite || companyDuplicateStatus !== "idle"}
                       type="submit"
                     >
-                      {saving ? "Salvando…" : "Salvar alterações"}
+                      {saving ? "Gravando…" : "Gravar"}
+                    </button>
+                    <button
+                      className="button-secondary"
+                      disabled={saving || activeCompany.id !== session?.tenantId || !canWrite || companyDuplicateStatus !== "idle"}
+                      onClick={(event) => {
+                        requestCadastroContinue(event, handleUpdate);
+                      }}
+                      type="button"
+                    >
+                      {saving ? "Gravando…" : "Gravar e Continuar"}
                     </button>
                     <button
                       className="button-secondary"

@@ -32,6 +32,14 @@ export function nextFloorAction(status: string, bagClosed: boolean): FloorAction
   return null;
 }
 
+export function floorActionLabel(action: FloorAction): string {
+  if (action === 'pick_up') return 'Pegar sacola';
+  if (action === 'finish_production') return 'Terminei';
+  if (action === 'open_review') return 'Abrir revisão';
+  if (action === 'pick_up_rework') return 'Pegar refação';
+  return 'Terminei a refação';
+}
+
 export function floorActionResultStatus(action: FloorAction): ServiceOrderStatus {
   if (action === 'pick_up') {
     return ServiceOrderStatus.IN_PRODUCTION;

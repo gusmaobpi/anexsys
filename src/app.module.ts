@@ -20,6 +20,7 @@ import { QualityModule } from './modules/quality/quality.module';
 import { ReworkModule } from './modules/rework/rework.module';
 import { WarrantyModule } from './modules/warranty/warranty.module';
 import { FinanceModule } from './modules/finance/finance.module';
+import { FloorScheduleModule } from './modules/floor-schedule/floor-schedule.module';
 import { FiscalModule } from './modules/fiscal/fiscal.module';
 import { CustodyModule } from './modules/custody/custody.module';
 import { JwtAuthGuard } from './platform/auth/jwt-auth.guard';
@@ -51,6 +52,7 @@ import { patchPostgresQueryRunnerForRls } from './platform/tenancy/tenant-rls.pa
     ReworkModule,
     WarrantyModule,
     FinanceModule,
+    FloorScheduleModule,
     FiscalModule,
     CustodyModule,
     PickupModule,

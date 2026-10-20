@@ -182,6 +182,9 @@ export function WorkspaceManagerProvider({ children }: Readonly<{ children: Reac
     }
 
     hydratedFromUrlRef.current = true;
+    if (pathname.startsWith("/floor/")) {
+      return;
+    }
     const landing = resolveLandingWorkspaceTab(storeRef.current, pathname, urlTabId);
     if (landing.goHome) {
       commitStore((current) => setActiveWorkspaceTab(current, null));
@@ -308,8 +311,9 @@ export function WorkspaceManagerProvider({ children }: Readonly<{ children: Reac
 
       const closingTabIndex = storeRef.current.tabs.findIndex((candidate) => candidate.id === tabId);
       const nextStore = removeWorkspaceTab(storeRef.current, tabId);
+      const activeTabId = storeRef.current.activeTabId;
 
-      if (tabId !== currentTabId) {
+      if (tabId !== activeTabId) {
         commitStore(nextStore);
         return;
       }
@@ -326,7 +330,7 @@ export function WorkspaceManagerProvider({ children }: Readonly<{ children: Reac
       commitStore(setActiveWorkspaceTab(nextStore, fallbackTab.id));
       syncWorkspaceUrl(fallbackTab.pathname, fallbackTab.id);
     },
-    [commitStore, currentTabId, router, syncWorkspaceUrl],
+    [commitStore, router, syncWorkspaceUrl],
   );
 
   const openWorkspaceInNewTab = useCallback(

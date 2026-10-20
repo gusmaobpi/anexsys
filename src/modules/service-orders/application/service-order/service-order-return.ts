@@ -59,7 +59,7 @@ export function osOpHeaderTerm(input: {
   if (input.returnKind === ServiceOrderReturnKind.COUNTER) {
     return 'Refação no balcão';
   }
-  return input.paymentStatus === 'paid' ? 'Pago' : 'Pagar na retirada';
+  return input.paymentStatus === 'paid' ? 'Pago' : 'Saldo em aberto';
 }
 
 export function buildClientReturnPreview(

@@ -11,7 +11,10 @@ import {
   ServiceOrderPaymentStatus,
 } from 'src/shared/domain/enums';
 
-function createFinanceFixture() {
+function createFinanceFixture(options?: {
+  items?: Array<Record<string, unknown>>;
+  totalValue?: string;
+}) {
   const payments: Array<Record<string, any>> = [];
   const allocations: Array<Record<string, any>> = [];
   const exceptions: Array<Record<string, any>> = [];
@@ -22,9 +25,9 @@ function createFinanceFixture() {
     customerId: 'customer-1',
     promisedDeliveryDate: '2026-09-25',
     paymentTermsDays: 3,
-    totalValue: '80.00',
+    totalValue: options?.totalValue ?? '80.00',
   };
-  const items = [
+  const items = options?.items ?? [
     { id: 'item-1', itemNo: 1, description: 'Blue Shirt', quantity: '1', unitPrice: '50.00', discountValue: '0.00' },
     { id: 'item-2', itemNo: 2, description: 'Gray Pants', quantity: '1', unitPrice: '30.00', discountValue: '0.00' },
   ];
@@ -34,7 +37,9 @@ function createFinanceFixture() {
       return { createdAt: new Date(), updatedAt: new Date(), ...payload };
     },
     async save(entity: Record<string, any>) {
-      payments.push(entity);
+      const index = payments.findIndex((payment) => payment.id === entity.id);
+      if (index >= 0) payments[index] = entity;
+      else payments.push(entity);
       return entity;
     },
     async runInTransaction<T>(callback: (manager: any) => Promise<T>) {
@@ -43,7 +48,9 @@ function createFinanceFixture() {
           if (entity?.name === 'PaymentRecordEntity') {
             return {
               save: async (value: Record<string, any>) => {
-                payments.push(value);
+                const index = payments.findIndex((payment) => payment.id === value.id);
+                if (index >= 0) payments[index] = value;
+                else payments.push(value);
                 return value;
               },
             };
@@ -67,6 +74,9 @@ function createFinanceFixture() {
     },
     async findByServiceOrder(serviceOrderId: string) {
       return payments.filter((payment) => payment.serviceOrderId === serviceOrderId);
+    },
+    async findPendingByBillingScope(billingScopeId: string) {
+      return payments.find((payment) => payment.billingScopeId === billingScopeId && payment.status === 'pending') ?? null;
     },
     async search(_tenantId: string, filters: Record<string, any>) {
       return payments.filter((payment) => {
@@ -151,6 +161,11 @@ function createFinanceFixture() {
         return audits;
       },
     } as never,
+    {
+      async getActiveConfig() {
+        return { environment: "sandbox" };
+      },
+    } as never,
   );
 
   return { service, payments, allocations, exceptions, audits, serviceOrder };
@@ -195,6 +210,7 @@ describe('FinanceService', () => {
       actorUserId: 'user-1',
       serviceOrderId: 'service-order-1',
       paymentMethod: PaymentMethod.CARD,
+      manualReason: 'Baixa no balcão',
       paymentAmount: 60,
     });
 
@@ -217,6 +233,7 @@ describe('FinanceService', () => {
       actorUserId: 'user-1',
       serviceOrderId: 'service-order-1',
       paymentMethod: PaymentMethod.CASH,
+      manualReason: 'Baixa no balcão',
       paymentAmount: 80,
       allocations: [{ serviceOrderItemId: 'item-1', allocatedAmount: 40 }],
     });
@@ -361,5 +378,84 @@ describe('FinanceService', () => {
     assert.equal(actual.length, 1);
     assert.equal(actual[0]?.paymentId, 'payment-1');
     assert.equal(actual[0]?.paymentAmount, '25.00');
+  });
+
+  it('keeps the suspended piece out of the open balance and blocks a second pending charge', async () => {
+    const { service } = createFinanceFixture({
+      totalValue: '80.00',
+      items: [
+        { id: 'item-1', itemNo: 1, description: 'Entregue', quantity: '1', unitPrice: '50.00', discountValue: '0.00', heldForRework: false },
+        { id: 'item-2', itemNo: 2, description: 'Suspensa', quantity: '1', unitPrice: '30.00', discountValue: '0.00', heldForRework: true },
+      ],
+    });
+
+    const partial = await service.createPayment({
+      tenantId: 'tenant-1',
+      actorUserId: 'user-1',
+      serviceOrderId: 'service-order-1',
+      paymentMethod: PaymentMethod.CASH,
+      manualReason: 'Baixa no balcão',
+      paymentAmount: 20,
+    });
+    assert.equal(partial.exigivel, '50.00');
+    assert.equal(partial.suspenso, '30.00');
+    assert.equal(partial.outstandingBalance, '30.00');
+
+    await assert.rejects(
+      () =>
+        service.createPayment({
+          tenantId: 'tenant-1',
+          actorUserId: 'user-1',
+          serviceOrderId: 'service-order-1',
+          paymentMethod: PaymentMethod.CARD,
+          paymentAmount: 40,
+          status: PaymentRecordStatus.PENDING,
+        }),
+      /saldo em aberto/,
+    );
+
+    await service.createPayment({
+      tenantId: 'tenant-1',
+      actorUserId: 'user-1',
+      serviceOrderId: 'service-order-1',
+      paymentMethod: PaymentMethod.CARD,
+      paymentAmount: 10,
+      status: PaymentRecordStatus.PENDING,
+    });
+    await assert.rejects(
+      () =>
+        service.createPayment({
+          tenantId: 'tenant-1',
+          actorUserId: 'user-1',
+          serviceOrderId: 'service-order-1',
+          paymentMethod: PaymentMethod.PIX,
+          manualReason: 'Baixa no balcão',
+          paymentAmount: 10,
+        }),
+      /aguardando confirmação/,
+    );
+  });
+
+  it('reverses a received payment with a reason and reopens the balance', async () => {
+    const { service, audits } = createFinanceFixture();
+    const created = await service.createPayment({
+      tenantId: 'tenant-1',
+      actorUserId: 'user-1',
+      serviceOrderId: 'service-order-1',
+      paymentMethod: PaymentMethod.CASH,
+      manualReason: 'Baixa no balcão',
+      paymentAmount: 80,
+    });
+    assert.equal(created.outstandingBalance, '0.00');
+
+    await assert.rejects(() => service.reversePayment(created.payment.id, 'tenant-1', 'manager-1', '   '), /motivo do estorno/);
+
+    const reversed = await service.reversePayment(created.payment.id, 'tenant-1', 'manager-1', 'Cliente desistiu');
+    assert.equal(reversed.paymentStatus, ServiceOrderPaymentStatus.PENDING);
+    assert.equal(reversed.outstandingBalance, '80.00');
+    assert.equal(reversed.amountPaid, '0.00');
+    assert.equal(reversed.payments?.[0]?.status, PaymentRecordStatus.REVERSED);
+    assert.equal(reversed.payments?.[0]?.reversalReason, 'Cliente desistiu');
+    assert.equal(audits.some((audit) => audit.action === 'finance.payment.reversed'), true);
   });
 });

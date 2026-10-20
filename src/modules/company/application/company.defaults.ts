@@ -104,6 +104,7 @@ export const ATELIER_ROLES = [
       'production_orders.write',
       'quality.read',
       'quality.write',
+      'floor_schedule.write',
       'finance.read',
       'finance.write',
     ],

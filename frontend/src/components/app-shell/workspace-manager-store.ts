@@ -258,6 +258,10 @@ export function resolveLandingWorkspaceTab(
     return { activeTabId: urlTabId, goHome: false };
   }
 
+  if (currentPathname.startsWith("/floor/")) {
+    return { activeTabId: null, goHome: false };
+  }
+
   if (isHomeWorkspacePath(currentPathname)) {
     return { activeTabId: null, goHome: true };
   }

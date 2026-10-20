@@ -1,11 +1,11 @@
 import { Inject, Body, Controller, ForbiddenException, Get, Param, ParseUUIDPipe, Post, Query, UnauthorizedException } from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { ServiceOrderService } from 'src/modules/service-orders/application/service-order/service-order.service';
 import { Permissions } from 'src/platform/auth/permissions.decorator';
 import { PlatformRequest } from 'src/platform/http/request-context';
 import { CurrentRequest, CurrentTenantId } from 'src/platform/http/request-context.decorators';
-import { PaymentDirection, PaymentMethod, PaymentProviderName, PaymentRecordStatus } from 'src/shared/domain/enums';
+import { PaymentDirection, PaymentMethod, PaymentModality, PaymentProviderName, PaymentRecordStatus } from 'src/shared/domain/enums';
 import { FinanceService } from '../application/finance/finance.service';
 import { PaymentChargeService } from '../application/finance/payment-charge.service';
 import { SearchPaymentsDto } from '../contracts/dto/search-payments.dto';
@@ -31,6 +31,15 @@ class CreatePaymentBody {
 
   @IsEnum(PaymentMethod)
   paymentMethod!: PaymentMethod;
+
+  @IsOptional()
+  @IsEnum(PaymentModality)
+  informedModality?: PaymentModality;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  manualReason?: string;
 
   @IsOptional()
   @IsEnum(PaymentProviderName)
@@ -86,9 +95,19 @@ class ChargePaymentBody {
   @Min(0.01)
   amount!: number;
 
+  @IsEnum(PaymentModality)
+  modality!: PaymentModality;
+
   @IsOptional()
   @IsUUID()
   terminalId?: string;
+}
+
+class ReversePaymentBody {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  reason!: string;
 }
 
 @Controller('payments')
@@ -128,6 +147,8 @@ export class PaymentsController {
       serviceOrderId: body.serviceOrderId,
       paymentReferenceNo: body.paymentReferenceNo,
       paymentMethod: body.paymentMethod,
+      informedModality: body.informedModality,
+      manualReason: body.manualReason,
       paymentProvider: body.paymentProvider,
       paymentDirection: body.paymentDirection,
       paymentAmount: body.paymentAmount,
@@ -151,6 +172,7 @@ export class PaymentsController {
       actorUserId: principal.userId,
       serviceOrderId: body.serviceOrderId,
       amount: body.amount,
+      informedModality: body.modality,
       terminalId: body.terminalId,
     });
   }
@@ -173,6 +195,26 @@ export class PaymentsController {
     const details = await this.financeService.getPaymentDetails(tenantId, paymentId);
     this.serviceOrderService.assertBranchAccess(details.serviceOrder, principal.effectiveBranchIds);
     return this.paymentChargeService.refreshCharge(tenantId, paymentId, principal.userId);
+  }
+
+  @Permissions('finance.refund')
+  @Post(':paymentId/reverse')
+  async reverse(@Param('paymentId', new ParseUUIDPipe()) paymentId: string, @Body() body: ReversePaymentBody, @CurrentTenantId() tenantId: string | null, @CurrentRequest() request: PlatformRequest) {
+    const principal = request.requestContext.authenticatedPrincipal;
+    if (!tenantId || !principal) throw new UnauthorizedException('Authenticated tenant context is required.');
+    const details = await this.financeService.getPaymentDetails(tenantId, paymentId);
+    this.serviceOrderService.assertBranchAccess(details.serviceOrder, principal.effectiveBranchIds);
+    return this.financeService.reversePayment(paymentId, tenantId, principal.userId, body.reason);
+  }
+
+  @Permissions('finance.write')
+  @Post(':paymentId/cancel')
+  async cancelCharge(@Param('paymentId', new ParseUUIDPipe()) paymentId: string, @CurrentTenantId() tenantId: string | null, @CurrentRequest() request: PlatformRequest) {
+    const principal = request.requestContext.authenticatedPrincipal;
+    if (!tenantId || !principal) throw new UnauthorizedException('Authenticated tenant context is required.');
+    const details = await this.financeService.getPaymentDetails(tenantId, paymentId);
+    this.serviceOrderService.assertBranchAccess(details.serviceOrder, principal.effectiveBranchIds);
+    return this.paymentChargeService.cancelCharge(tenantId, paymentId, principal.userId);
   }
 
   @Permissions('finance.write')

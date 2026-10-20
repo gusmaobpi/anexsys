@@ -36,8 +36,13 @@ export class ServiceOrderRepository {
     return this.repository.findOne({ where: { publicToken, isDeleted: false } });
   }
 
-  async findActiveFloorBags(tenantId: string, branchId: string, excludeId: string): Promise<ServiceOrderEntity[]> {
-    return this.repository.find({
+  async findActiveFloorBags(
+    tenantId: string,
+    branchId: string,
+    excludeId: string,
+    holderUserId?: string,
+  ): Promise<ServiceOrderEntity[]> {
+    const rows = await this.repository.find({
       where: {
         tenantId,
         branchId,
@@ -47,6 +52,10 @@ export class ServiceOrderRepository {
       },
       order: { openedAt: 'DESC' },
     });
+    if (!holderUserId) {
+      return rows;
+    }
+    return rows.filter((row) => !row.floorHolderUserId || row.floorHolderUserId === holderUserId);
   }
 
   async findByGroupId(tenantId: string, groupId: string): Promise<ServiceOrderEntity[]> {

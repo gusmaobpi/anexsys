@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmpresaListPanel } from "@/components/admin/empresa-list-panel";
 import { empresaDisplayName, type EmpresaListRecord } from "@/components/admin/empresa-list";
+import { finishCadastroSave, requestCadastroContinue, useCadastroListRefresh, type CadastroSaveIntent } from "@/components/app-shell/cadastro-save-navigation";
 import { useWorkspaceManager, useWorkspaceRegistration, useWorkspaceScopedState } from "@/components/app-shell/workspace-manager";
 import { useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
@@ -202,6 +203,8 @@ export function EmpresasWorkspace() {
     return () => window.clearTimeout(timeoutId);
   }, [loadCompanies]);
 
+  useCadastroListRefresh("/admin/companies", isListWorkspace, loadCompanies);
+
   const openCreateForm = useCallback(
     (name?: string) => {
       setShowCreate(true);
@@ -254,6 +257,14 @@ export function EmpresasWorkspace() {
       closeWorkspace(closingTabId);
     }, 0);
   }, [closeWorkspace, currentTabId, isMobile, navigateWithinWorkspace, openWorkspaceInNewTab]);
+
+  function finishEmpresaSave(intent: CadastroSaveIntent) {
+    finishCadastroSave(intent, { currentTabId, isMobile, closeWorkspace }, {
+      listPath: "/admin/companies",
+      openCreate: () => openCreateWorkspace(),
+      navigateToList: () => navigateWithinWorkspace("/admin/companies"),
+    });
+  }
 
   useEffect(() => {
     if (workspaceMode !== "new") {
@@ -324,7 +335,7 @@ export function EmpresasWorkspace() {
     }
   }, [form.postalCode, setForm]);
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  async function handleCreate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWrite) return;
     setSaving(true);
@@ -338,13 +349,10 @@ export function EmpresasWorkspace() {
         ...current,
         { ...created, status: created.status === "inactive" ? "inactive" : "active" },
       ]);
-      setActiveId(created.id);
-      setShowCreate(false);
-      setForm(mapCompanyToForm(created));
       await reloadEmpresas(created.id);
       await selectEmpresa(created.id);
-      navigateWithinWorkspace(`/admin/companies?focusCompanyId=${encodeURIComponent(created.id)}`);
       setMessage("Empresa criada. A Filial filha padrão (Matriz) nasceu junto. Ela já está no contexto ativo.");
+      finishEmpresaSave(intent);
     } catch (error) {
       setMessage(describeCompanyError(error, "A empresa não pôde ser criada."));
     } finally {
@@ -352,7 +360,7 @@ export function EmpresasWorkspace() {
     }
   }
 
-  async function handleUpdate(event: FormEvent<HTMLFormElement>) {
+  async function handleUpdate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWrite || !active) return;
     setSaving(true);
@@ -367,6 +375,7 @@ export function EmpresasWorkspace() {
       setForm(mapCompanyToForm(normalized));
       await reloadEmpresas(normalized.id);
       setMessage("Empresa atualizada.");
+      finishEmpresaSave(intent);
     } catch (error) {
       setMessage(describeCompanyError(error, "A empresa não pôde ser atualizada."));
     } finally {
@@ -541,7 +550,17 @@ export function EmpresasWorkspace() {
                 />
                 <div className="button-row">
                   <button className="button" disabled={saving} type="submit">
-                    {saving ? "Salvando…" : "Criar empresa"}
+                    {saving ? "Gravando…" : "Gravar"}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    disabled={saving}
+                    onClick={(event) => {
+                      requestCadastroContinue(event, handleCreate);
+                    }}
+                    type="button"
+                  >
+                    {saving ? "Gravando…" : "Gravar e Continuar"}
                   </button>
                   <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                     Cancelar
@@ -559,7 +578,17 @@ export function EmpresasWorkspace() {
                 />
                 <div className="button-row">
                   <button className="button" disabled={saving || !canWrite} type="submit">
-                    {saving ? "Salvando…" : "Salvar alterações"}
+                    {saving ? "Gravando…" : "Gravar"}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    disabled={saving || !canWrite}
+                    onClick={(event) => {
+                      requestCadastroContinue(event, handleUpdate);
+                    }}
+                    type="button"
+                  >
+                    {saving ? "Gravando…" : "Gravar e Continuar"}
                   </button>
                   <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                     Voltar para a lista

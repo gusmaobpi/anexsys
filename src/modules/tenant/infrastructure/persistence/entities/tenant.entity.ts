@@ -26,6 +26,9 @@ export class TenantEntity extends SoftDeletableBusinessEntity {
   @Column({ name: 'block_delivery_with_outstanding_balance', type: 'boolean', default: false })
   blockDeliveryWithOutstandingBalance!: boolean;
 
+  @Column({ name: 'machine_wait_minutes', type: 'integer', default: 3 })
+  machineWaitMinutes!: number;
+
   @Column({ name: 'default_measurement_unit_code', type: 'varchar', length: 20, default: 'CM' })
   defaultMeasurementUnitCode!: string;
 

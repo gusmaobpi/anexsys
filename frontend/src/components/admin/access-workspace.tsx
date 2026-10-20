@@ -18,6 +18,7 @@ import {
   type AccessRoleListRecord,
   type AccessUserListRecord,
 } from "@/components/admin/access-list";
+import { finishCadastroSave, requestCadastroContinue, useCadastroListRefresh, type CadastroSaveIntent } from "@/components/app-shell/cadastro-save-navigation";
 import { useWorkspaceManager, useWorkspaceRegistration, useWorkspaceScopedState } from "@/components/app-shell/workspace-manager";
 import { useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
@@ -457,6 +458,8 @@ export function AccessWorkspace() {
     return () => window.clearTimeout(timeoutId);
   }, [loadWorkspace]);
 
+  useCadastroListRefresh("/admin/access", isListWorkspace, loadWorkspace);
+
   useEffect(() => {
     if (!activeUser || showCreateUser) return;
     const timeoutId = window.setTimeout(() => {
@@ -545,6 +548,14 @@ export function AccessWorkspace() {
     },
     [isMobile, navigateWithinWorkspace, openWorkspaceInNewTab],
   );
+
+  function finishAccessSave(intent: CadastroSaveIntent, tab: AccessTab) {
+    finishCadastroSave(intent, { currentTabId, isMobile, closeWorkspace }, {
+      listPath: "/admin/access",
+      openCreate: () => openAccessCreateWorkspace(tab),
+      navigateToList: () => navigateWithinWorkspace(listHrefFor(tab)),
+    });
+  }
 
   const openRoleEditWorkspace = useCallback(
     (role: Pick<RoleRecord, "id" | "displayName" | "code">) => {
@@ -796,7 +807,7 @@ export function AccessWorkspace() {
     setUserDuplicateStatus(duplicate ? "duplicate" : "idle");
   }, [activeUser?.id, clearUserDuplicate, showCreateUser, userForm.email, users]);
 
-  async function handleCreateUser(event: FormEvent<HTMLFormElement>) {
+  async function handleCreateUser(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWriteUsers) return;
     if (userDuplicateStatus !== "idle") {
@@ -816,11 +827,8 @@ export function AccessWorkspace() {
         }),
       });
       setUsers((current) => [...current, created].sort((left, right) => left.displayName.localeCompare(right.displayName)));
-      setActiveUserId(created.id);
-      setShowCreateUser(false);
-      setUserForm(mapUserToForm(created));
-      navigateWithinWorkspace(`/admin/access?focusUserId=${encodeURIComponent(created.id)}`);
       setMessage("Usuário criado com sucesso.");
+      finishAccessSave(intent, "users");
     } catch (error) {
       setMessage(describeWorkspaceError(error, "O usuário não pôde ser criado."));
     } finally {
@@ -828,7 +836,7 @@ export function AccessWorkspace() {
     }
   }
 
-  async function handleUpdateUser(event: FormEvent<HTMLFormElement>) {
+  async function handleUpdateUser(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWriteUsers || !activeUser) return;
     if (userDuplicateStatus !== "idle") {
@@ -848,9 +856,8 @@ export function AccessWorkspace() {
         }),
       });
       setUsers((current) => current.map((record) => (record.id === updated.id ? updated : record)));
-      setUserForm(mapUserToForm(updated));
       setMessage("Usuário atualizado com sucesso.");
-      await loadUserSummary(updated.id);
+      finishAccessSave(intent, "users");
     } catch (error) {
       setMessage(describeWorkspaceError(error, "O usuário não pôde ser atualizado."));
     } finally {
@@ -858,7 +865,7 @@ export function AccessWorkspace() {
     }
   }
 
-  async function handleCreateRole(event: FormEvent<HTMLFormElement>) {
+  async function handleCreateRole(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWriteRoles) return;
     setSaving(true);
@@ -869,11 +876,8 @@ export function AccessWorkspace() {
         body: JSON.stringify(roleForm),
       });
       setRoles((current) => [...current, created].sort((left, right) => left.displayName.localeCompare(right.displayName)));
-      setActiveRoleId(created.id);
-      setShowCreateRole(false);
-      setRoleForm(mapRoleToForm(created));
-      navigateWithinWorkspace(`/admin/access?accessTab=roles&focusRoleId=${encodeURIComponent(created.id)}`);
       setMessage("Papel criado com sucesso.");
+      finishAccessSave(intent, "roles");
     } catch (error) {
       setMessage(describeWorkspaceError(error, "O papel não pôde ser criado."));
     } finally {
@@ -881,7 +885,7 @@ export function AccessWorkspace() {
     }
   }
 
-  async function handleUpdateRole(event: FormEvent<HTMLFormElement>) {
+  async function handleUpdateRole(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWriteRoles || !activeRole) return;
     setSaving(true);
@@ -892,8 +896,8 @@ export function AccessWorkspace() {
         body: JSON.stringify(roleForm),
       });
       setRoles((current) => current.map((record) => (record.id === updated.id ? updated : record)));
-      setRoleForm(mapRoleToForm(updated));
       setMessage("Papel atualizado com sucesso.");
+      finishAccessSave(intent, "roles");
     } catch (error) {
       setMessage(describeWorkspaceError(error, "O papel não pôde ser atualizado."));
     } finally {
@@ -901,7 +905,7 @@ export function AccessWorkspace() {
     }
   }
 
-  async function handleCreatePermission(event: FormEvent<HTMLFormElement>) {
+  async function handleCreatePermission(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWritePermissions) return;
     setSaving(true);
@@ -912,11 +916,8 @@ export function AccessWorkspace() {
         body: JSON.stringify(permissionForm),
       });
       setPermissions((current) => [...current, created].sort((left, right) => left.code.localeCompare(right.code)));
-      setActivePermissionId(created.id);
-      setShowCreatePermission(false);
-      setPermissionForm(mapPermissionToForm(created));
-      navigateWithinWorkspace(`/admin/access?accessTab=permissions&focusPermissionId=${encodeURIComponent(created.id)}`);
       setMessage("Permissão criada com sucesso.");
+      finishAccessSave(intent, "permissions");
     } catch (error) {
       setMessage(describeWorkspaceError(error, "A permissão não pôde ser criada."));
     } finally {
@@ -924,7 +925,7 @@ export function AccessWorkspace() {
     }
   }
 
-  async function handleUpdatePermission(event: FormEvent<HTMLFormElement>) {
+  async function handleUpdatePermission(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWritePermissions || !activePermission) return;
     setSaving(true);
@@ -935,8 +936,8 @@ export function AccessWorkspace() {
         body: JSON.stringify(permissionForm),
       });
       setPermissions((current) => current.map((record) => (record.id === updated.id ? updated : record)));
-      setPermissionForm(mapPermissionToForm(updated));
       setMessage("Permissão atualizada com sucesso.");
+      finishAccessSave(intent, "permissions");
     } catch (error) {
       setMessage(describeWorkspaceError(error, "A permissão não pôde ser atualizada."));
     } finally {
@@ -1167,13 +1168,13 @@ export function AccessWorkspace() {
               <h3>{showCreateUser || workspaceMode === "new" ? "Novo usuário" : activeUser?.displayName ?? "Alterar usuário"}</h3>
               <p>
                 {showCreateUser || workspaceMode === "new"
-                  ? "Cadastre o usuário e retorne à lista."
+                  ? "Gravar fecha esta aba. Gravar e Continuar abre outro usuário."
                   : "Visualize e ajuste o usuário selecionado."}
               </p>
             </div>
 
             {showCreateUser || workspaceMode === "new" ? (
-              <form className="form-grid" onSubmit={handleCreateUser}>
+              <form className="form-grid" onSubmit={(event) => void handleCreateUser(event)}>
                 <UserFormFields
                   duplicateGuard={
                     <MasterDataDuplicateGuard
@@ -1209,7 +1210,17 @@ export function AccessWorkspace() {
                 />
                 <div className="button-row">
                   <button className="button" disabled={saving || userDuplicateStatus !== "idle"} type="submit">
-                    {saving ? "Salvando…" : "Salvar"}
+                    {saving ? "Gravando…" : "Gravar"}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    disabled={saving || userDuplicateStatus !== "idle"}
+                    onClick={(event) => {
+                      requestCadastroContinue(event, handleCreateUser);
+                    }}
+                    type="button"
+                  >
+                    {saving ? "Gravando…" : "Gravar e Continuar"}
                   </button>
                   <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                     Cancelar
@@ -1268,7 +1279,17 @@ export function AccessWorkspace() {
                   />
                   <div className="button-row">
                     <button className="button" disabled={saving || !canWriteUsers || userDuplicateStatus !== "idle"} type="submit">
-                      {saving ? "Salvando…" : "Salvar alterações"}
+                      {saving ? "Gravando…" : "Gravar"}
+                    </button>
+                    <button
+                      className="button-secondary"
+                      disabled={saving || !canWriteUsers || userDuplicateStatus !== "idle"}
+                      onClick={(event) => {
+                        requestCadastroContinue(event, handleUpdateUser);
+                      }}
+                      type="button"
+                    >
+                      {saving ? "Gravando…" : "Gravar e Continuar"}
                     </button>
                     <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                       Cancelar
@@ -1451,7 +1472,7 @@ export function AccessWorkspace() {
               <h3>{showCreateRole || workspaceMode === "new" ? "Novo papel" : activeRole?.displayName ?? "Alterar papel"}</h3>
               <p>
                 {showCreateRole || workspaceMode === "new"
-                  ? "Cadastre o papel e retorne à lista."
+                  ? "Gravar fecha esta aba. Gravar e Continuar abre outro papel."
                   : "Visualize e ajuste o papel selecionado."}
               </p>
             </div>
@@ -1460,7 +1481,17 @@ export function AccessWorkspace() {
                 <RoleFormFields form={roleForm} setForm={setRoleForm} />
                 <div className="button-row">
                   <button className="button" disabled={saving} type="submit">
-                    {saving ? "Salvando…" : "Salvar"}
+                    {saving ? "Gravando…" : "Gravar"}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    disabled={saving}
+                    onClick={(event) => {
+                      requestCadastroContinue(event, handleCreateRole);
+                    }}
+                    type="button"
+                  >
+                    {saving ? "Gravando…" : "Gravar e Continuar"}
                   </button>
                   <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                     Cancelar
@@ -1473,7 +1504,17 @@ export function AccessWorkspace() {
                   <RoleFormFields form={roleForm} setForm={setRoleForm} />
                   <div className="button-row">
                     <button className="button" disabled={saving || !canWriteRoles} type="submit">
-                      {saving ? "Salvando…" : "Salvar alterações"}
+                      {saving ? "Gravando…" : "Gravar"}
+                    </button>
+                    <button
+                      className="button-secondary"
+                      disabled={saving || !canWriteRoles}
+                      onClick={(event) => {
+                        requestCadastroContinue(event, handleUpdateRole);
+                      }}
+                      type="button"
+                    >
+                      {saving ? "Gravando…" : "Gravar e Continuar"}
                     </button>
                     <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                       Cancelar
@@ -1509,7 +1550,7 @@ export function AccessWorkspace() {
               <h3>{showCreatePermission || workspaceMode === "new" ? "Nova permissão" : activePermission?.displayName ?? "Alterar permissão"}</h3>
               <p>
                 {showCreatePermission || workspaceMode === "new"
-                  ? "Cadastre a permissão e retorne à lista."
+                  ? "Gravar fecha esta aba. Gravar e Continuar abre outra permissão."
                   : "Visualize e ajuste a permissão selecionada."}
               </p>
             </div>
@@ -1518,7 +1559,17 @@ export function AccessWorkspace() {
                 <PermissionFormFields form={permissionForm} setForm={setPermissionForm} />
                 <div className="button-row">
                   <button className="button" disabled={saving} type="submit">
-                    {saving ? "Salvando…" : "Salvar"}
+                    {saving ? "Gravando…" : "Gravar"}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    disabled={saving}
+                    onClick={(event) => {
+                      requestCadastroContinue(event, handleCreatePermission);
+                    }}
+                    type="button"
+                  >
+                    {saving ? "Gravando…" : "Gravar e Continuar"}
                   </button>
                   <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                     Cancelar
@@ -1530,7 +1581,17 @@ export function AccessWorkspace() {
                 <PermissionFormFields form={permissionForm} setForm={setPermissionForm} />
                 <div className="button-row">
                   <button className="button" disabled={saving || !canWritePermissions} type="submit">
-                    {saving ? "Salvando…" : "Salvar alterações"}
+                    {saving ? "Gravando…" : "Gravar"}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    disabled={saving || !canWritePermissions}
+                    onClick={(event) => {
+                      requestCadastroContinue(event, handleUpdatePermission);
+                    }}
+                    type="button"
+                  >
+                    {saving ? "Gravando…" : "Gravar e Continuar"}
                   </button>
                   <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                     Cancelar

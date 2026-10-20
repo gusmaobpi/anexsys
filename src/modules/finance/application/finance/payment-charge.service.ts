@@ -3,13 +3,16 @@ import { randomUUID } from 'crypto';
 import { AuditService } from 'src/modules/audit/application/audit/audit.service';
 import { BranchService } from 'src/modules/branch/application/branch/branch.service';
 import { ServiceOrderService } from 'src/modules/service-orders/application/service-order/service-order.service';
-import { PaymentDirection, PaymentMethod, PaymentRecordStatus } from 'src/shared/domain/enums';
+import { PaymentDirection, PaymentMethod, PaymentModality, PaymentRecordStatus } from 'src/shared/domain/enums';
 import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
 import { EntityNotFoundError } from 'src/shared/errors/entity-not-found.error';
 import {
   PaymentProviderErrorDetails,
   PaymentProviderRequestError,
 } from '../../contracts/provider/payment-provider-request-error';
+import { assertServiceOrderCanReceive } from 'src/modules/service-orders/application/service-order/service-order-finance';
+import { FinanceService } from './finance.service';
+import { modalitiesDiverge } from './payment-modality';
 import { PaymentProviderConfigService } from './payment-provider-config.service';
 import { PaymentProviderRegistry } from './payment-provider-registry';
 import { PaymentTerminalsService } from './payment-terminals.service';
@@ -22,6 +25,7 @@ export type PaymentChargeResult = {
   terminalName: string;
   provider: string;
   environment: string;
+  summary: Awaited<ReturnType<FinanceService['getFinancialSummary']>>;
 };
 
 @Injectable()
@@ -41,19 +45,27 @@ export class PaymentChargeService {
     private readonly paymentRecordRepository: PaymentRecordRepository,
     @Inject(AuditService)
     private readonly auditService: AuditService,
+    @Inject(FinanceService)
+    private readonly financeService: FinanceService,
   ) {}
 
   async initiateCharge(input: {
     tenantId: string;
     serviceOrderId: string;
     amount: number;
+    informedModality: PaymentModality;
     terminalId?: string;
     actorUserId: string;
   }): Promise<PaymentChargeResult> {
+    if (!Object.values(PaymentModality).includes(input.informedModality)) {
+      throw new DomainValidationError('Informe a modalidade do cartão: Crédito, Débito ou Pix.');
+    }
     const serviceOrder = await this.serviceOrderService.getById(input.serviceOrderId, input.tenantId);
+    assertServiceOrderCanReceive(serviceOrder);
     if (!Number.isFinite(input.amount) || input.amount <= 0) {
       throw new DomainValidationError('Informe o valor da cobrança.');
     }
+    const summary = await this.financeService.assertInboundReceipt(input.tenantId, input.serviceOrderId, input.amount);
     const terminal = await this.terminalsService.resolveForCharge(input.tenantId, serviceOrder.branchId, input.terminalId);
     const branch = await this.branchService.getById(serviceOrder.branchId);
     const config = await this.configService.getActiveConfig(input.tenantId, branch.companyId, terminal.provider);
@@ -66,6 +78,10 @@ export class PaymentChargeService {
       tenantId: input.tenantId,
       branchId: serviceOrder.branchId,
       serviceOrderId: serviceOrder.id,
+      billingScopeId: summary.billingScopeId,
+      informedModality: input.informedModality,
+      confirmedModality: null,
+      operatorProductCode: null,
       paymentReferenceNo: `ch_${randomUUID()}`,
       paymentMethod: PaymentMethod.CARD,
       paymentProvider: terminal.provider,
@@ -74,6 +90,11 @@ export class PaymentChargeService {
       receivedAt: null,
       authorizedAt: null,
       reconciledAt: null,
+      cardBrand: null,
+      installments: null,
+      nsu: null,
+      authorizationCode: null,
+      acquirerTransactionId: null,
       status: PaymentRecordStatus.PENDING,
       createdBy: input.actorUserId,
       updatedBy: input.actorUserId,
@@ -87,12 +108,23 @@ export class PaymentChargeService {
       throw new DomainValidationError('A operadora deste terminal ainda não está integrada ao ANEXSYS.');
     }
 
-    await this.paymentRecordRepository.save(payment);
+    try {
+      await this.paymentRecordRepository.runInTransaction(async (manager) => {
+        await this.financeService.assertNoPendingCharge(payment.billingScopeId, manager);
+        await manager.getRepository(PaymentRecordEntity).save(payment);
+      });
+    } catch (error) {
+      if (this.isPendingScopeConflict(error)) {
+        throw new DomainValidationError('Já existe uma cobrança aguardando confirmação neste grupo.');
+      }
+      throw error;
+    }
     try {
       const result = await adapter.initiatePayment({
         provider: terminal.provider,
         referenceNo: payment.paymentReferenceNo as string,
         paymentMethod: PaymentMethod.CARD,
+        informedModality: input.informedModality,
         amount: input.amount,
         serviceOrderId: serviceOrder.id,
         credentials: config.credentials ?? {},
@@ -116,15 +148,15 @@ export class PaymentChargeService {
         result.authorized ? 'finance.charge.initiated' : 'finance.charge.failed',
         result.failureReason ?? null,
       );
-      return {
-        payment: saved,
+      return this.finishCharge(saved, {
         terminalId: terminal.id,
         terminalName: terminal.name,
         provider: terminal.provider,
         environment: config.environment,
-      };
+      });
     } catch (error) {
-      payment.status = PaymentRecordStatus.FAILED;
+      const orderMayExist = this.providerOrderMayExist(error);
+      payment.status = orderMayExist ? PaymentRecordStatus.PENDING : PaymentRecordStatus.FAILED;
       payment.updatedBy = input.actorUserId;
       await this.paymentRecordRepository.save(payment);
       if (error instanceof PaymentProviderRequestError) {
@@ -132,7 +164,7 @@ export class PaymentChargeService {
           input.tenantId,
           payment,
           input.actorUserId,
-          'finance.charge.failed',
+          orderMayExist ? 'finance.charge.pending' : 'finance.charge.failed',
           error.details.failureType,
           error.details,
         );
@@ -140,7 +172,7 @@ export class PaymentChargeService {
           config.environment === 'sandbox' ? error.toUserMessage() : 'A cobrança não pôde ser iniciada na operadora.',
         );
       }
-      await this.recordChargeAudit(input.tenantId, payment, input.actorUserId, 'finance.charge.failed', 'unexpected', {
+      await this.recordChargeAudit(input.tenantId, payment, input.actorUserId, orderMayExist ? 'finance.charge.pending' : 'finance.charge.failed', 'unexpected', {
         failureType: 'unexpected',
         exceptionMessage: error instanceof Error ? error.message : String(error),
       });
@@ -159,13 +191,61 @@ export class PaymentChargeService {
       nsu?: string | null;
       authorizationCode?: string | null;
       acquirerTransactionId?: string | null;
+      confirmedModality?: string | null;
+      operatorProductCode?: string | null;
     },
   ): void {
     if (fields.cardBrand) payment.cardBrand = fields.cardBrand;
-    if (fields.installments) payment.installments = fields.installments;
+    if (fields.installments !== undefined && fields.installments !== null) payment.installments = fields.installments;
     if (fields.nsu) payment.nsu = fields.nsu;
     if (fields.authorizationCode) payment.authorizationCode = fields.authorizationCode;
     if (fields.acquirerTransactionId) payment.acquirerTransactionId = fields.acquirerTransactionId;
+    if (fields.operatorProductCode) payment.operatorProductCode = fields.operatorProductCode;
+    if (fields.confirmedModality && Object.values(PaymentModality).includes(fields.confirmedModality as PaymentModality)) {
+      payment.confirmedModality = fields.confirmedModality as PaymentModality;
+    }
+  }
+
+  private providerOrderMayExist(error: unknown): boolean {
+    if (error instanceof PaymentProviderRequestError) {
+      return error.details.failureType === 'timeout' || error.details.failureType === 'network';
+    }
+    return true;
+  }
+
+  private isPendingScopeConflict(error: unknown): boolean {
+    const candidate = error as { code?: string; driverError?: { code?: string } };
+    return candidate?.code === '23505' || candidate?.driverError?.code === '23505';
+  }
+
+  private async finishCharge(
+    payment: PaymentRecordEntity,
+    context: { terminalId: string; terminalName: string; provider: string; environment: string },
+  ): Promise<PaymentChargeResult> {
+    if (modalitiesDiverge(payment.informedModality, payment.confirmedModality)) {
+      await this.auditService.record({
+        tenantId: payment.tenantId,
+        branchId: payment.branchId,
+        actorUserId: payment.updatedBy,
+        entityType: 'payment_record',
+        entityId: payment.id,
+        action: 'modality_mismatch',
+        eventType: 'finance.write',
+        metadata: {
+          serviceOrderId: payment.serviceOrderId,
+          informedModality: payment.informedModality,
+          confirmedModality: payment.confirmedModality,
+          operatorProductCode: payment.operatorProductCode,
+        },
+        previousValues: { informedModality: payment.informedModality },
+        newValues: { confirmedModality: payment.confirmedModality },
+      });
+    }
+    return {
+      payment,
+      ...context,
+      summary: await this.financeService.getFinancialSummary(payment.tenantId, payment.serviceOrderId),
+    };
   }
 
   async refreshCharge(tenantId: string, paymentId: string, actorUserId: string): Promise<PaymentChargeResult> {
@@ -218,13 +298,71 @@ export class PaymentChargeService {
     payment.updatedBy = actorUserId;
     const saved = await this.paymentRecordRepository.save(payment);
     await this.recordChargeAudit(tenantId, saved, actorUserId, 'finance.charge.status_refreshed', null);
-    return {
-      payment: saved,
+    return this.finishCharge(saved, {
       terminalId: '',
       terminalName: '',
       provider: saved.paymentProvider as string,
       environment: config.environment,
-    };
+    });
+  }
+
+  async cancelCharge(tenantId: string, paymentId: string, actorUserId: string): Promise<PaymentChargeResult> {
+    const payment = await this.paymentRecordRepository.findById(paymentId);
+    if (!payment || payment.tenantId !== tenantId) {
+      throw new EntityNotFoundError(`Payment Record '${paymentId}' was not found.`);
+    }
+    if (payment.status !== PaymentRecordStatus.PENDING) {
+      throw new DomainValidationError('Só é possível cancelar uma cobrança que ainda aguarda a maquininha.');
+    }
+    if (!payment.paymentProvider || !payment.paymentReferenceNo) {
+      throw new DomainValidationError('Este pagamento não veio da maquininha.');
+    }
+    const adapter = this.providerRegistry.getAdapter(payment.paymentProvider);
+    if (!adapter?.cancelOrder) {
+      throw new DomainValidationError('O cancelamento ainda não existe para esta operadora.');
+    }
+    const branch = await this.branchService.getById(payment.branchId);
+    const config = await this.configService.getActiveConfig(tenantId, branch.companyId, payment.paymentProvider);
+    if (!config) {
+      throw new DomainValidationError('Configure a operadora deste pagamento em Configurações → Pagamentos.');
+    }
+    const orderId = payment.acquirerTransactionId ?? payment.paymentReferenceNo;
+    try {
+      await adapter.cancelOrder(orderId, {
+        credentials: config.credentials ?? {},
+        environment: config.environment,
+      });
+    } catch (error) {
+      if (error instanceof PaymentProviderRequestError) {
+        await this.recordChargeAudit(tenantId, payment, actorUserId, 'finance.charge.cancel_failed', error.details.failureType, error.details);
+        throw new DomainValidationError(
+          config.environment === 'sandbox' ? error.toUserMessage() : 'A cobrança não pôde ser cancelada na operadora.',
+        );
+      }
+      throw new DomainValidationError('A cobrança não pôde ser cancelada na operadora.');
+    }
+    const refreshed = await this.refreshCharge(tenantId, paymentId, actorUserId);
+    if (
+      refreshed.payment.status === PaymentRecordStatus.SETTLED ||
+      refreshed.payment.status === PaymentRecordStatus.RECEIVED ||
+      refreshed.payment.status === PaymentRecordStatus.AUTHORIZED
+    ) {
+      return refreshed;
+    }
+    if (refreshed.payment.status !== PaymentRecordStatus.CANCELED) {
+      refreshed.payment.status = PaymentRecordStatus.CANCELED;
+      refreshed.payment.updatedBy = actorUserId;
+      const saved = await this.paymentRecordRepository.save(refreshed.payment);
+      await this.recordChargeAudit(tenantId, saved, actorUserId, 'finance.charge.canceled', null);
+      return this.finishCharge(saved, {
+        terminalId: '',
+        terminalName: '',
+        provider: saved.paymentProvider as string,
+        environment: config.environment,
+      });
+    }
+    await this.recordChargeAudit(tenantId, refreshed.payment, actorUserId, 'finance.charge.canceled', null);
+    return refreshed;
   }
 
   /** Simulação oficial do Sandbox: adiciona uma transação CONFIRMED na ordem e já consulta o resultado. */

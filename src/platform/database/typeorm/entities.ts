@@ -5,6 +5,8 @@ import { RolePermissionEntity } from 'src/modules/authorization/infrastructure/p
 import { CommunityPermissionEntity } from 'src/modules/authorization/infrastructure/persistence/entities/community-permission.entity';
 import { CommunityEntity } from 'src/modules/authorization/infrastructure/persistence/entities/community.entity';
 import { UserCommunityEntity } from 'src/modules/authorization/infrastructure/persistence/entities/user-community.entity';
+import { WorkGroupEntity } from 'src/modules/authorization/infrastructure/persistence/entities/work-group.entity';
+import { WorkGroupMemberEntity } from 'src/modules/authorization/infrastructure/persistence/entities/work-group-member.entity';
 import { UserBranchScopeEntity } from 'src/modules/authorization/infrastructure/persistence/entities/user-branch-scope.entity';
 import { UserRoleAssignmentEntity } from 'src/modules/authorization/infrastructure/persistence/entities/user-role-assignment.entity';
 import { BranchEntity } from 'src/modules/branch/infrastructure/persistence/entities/branch.entity';
@@ -137,5 +139,7 @@ export const typeOrmEntities = [
   CommunityEntity,
   CommunityPermissionEntity,
   UserCommunityEntity,
+  WorkGroupEntity,
+  WorkGroupMemberEntity,
   AuditEventEntity,
 ] as const;

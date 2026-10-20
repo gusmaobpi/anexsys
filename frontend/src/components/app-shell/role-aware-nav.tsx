@@ -116,6 +116,12 @@ const navSections: NavSection[] = [
         requiredPermissions: ["users.read", "roles.read", "permissions.read"],
         permissionMatch: "all",
       },
+      {
+        href: "/admin/work-groups",
+        label: "Grupos de trabalho",
+        hint: "Quem trabalha junto. Não muda a permissão",
+        requiredPermissions: ["users.read"],
+      },
     ],
   },
   {
@@ -150,6 +156,24 @@ const navSections: NavSection[] = [
         label: "Controle de qualidade",
         hint: "Revisa peça a peça e gera OP de refação",
         requiredPermissions: ["quality.read"],
+      },
+      {
+        href: "/floor-collaborators",
+        label: "Colaboradores",
+        hint: "Perfil, diária e média de peças",
+        requiredPermissions: ["floor_schedule.write"],
+      },
+      {
+        href: "/floor-schedule",
+        label: "Grade de planejamento",
+        hint: "Escala da semana, quinzena ou mês",
+        requiredPermissions: ["floor_schedule.write"],
+      },
+      {
+        href: "/floor-today",
+        label: "Escala de hoje",
+        hint: "Confirmados, identificados e ativos",
+        requiredPermissions: ["service_orders.read"],
       },
     ],
   },

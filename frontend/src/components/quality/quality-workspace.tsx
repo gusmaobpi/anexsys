@@ -374,7 +374,7 @@ export function QualityWorkspace() {
                   <th title="Sequência">S</th>
                   <th>Produto</th>
                   <th>Serviço</th>
-                  <th>Detalhamento do ajuste</th>
+                  <th>Detalhar o serviço</th>
                   <th>Marca / modelo / série</th>
                   <th>Situação</th>
                   <th>Ações</th>

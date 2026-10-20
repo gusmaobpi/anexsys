@@ -101,6 +101,8 @@ describe('applyPendingMigrations', () => {
       executedQueries.some((sql) => sql.includes('chk_payment_records_status') && sql.includes("'canceled'")),
       true,
     );
+    assert.equal(executedQueries.some((sql) => sql.includes('ADD COLUMN IF NOT EXISTS machine_wait_minutes')), true);
+    assert.equal(executedQueries.some((sql) => sql.includes('chk_tenants_machine_wait_minutes')), true);
     assert.equal(executedQueries.some((sql) => sql.includes('ADD COLUMN IF NOT EXISTS public_token')), true);
     assert.equal(executedQueries.some((sql) => sql.includes('held_for_rework')), true);
     assert.equal(executedQueries.some((sql) => sql.includes('version_suffix TYPE varchar(8)')), true);

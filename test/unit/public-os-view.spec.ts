@@ -34,7 +34,7 @@ test('maps the public OS payload onto the printed service order', () => {
     totalValue: '90.00',
     recebiReady: false,
     pickedUp: false,
-    paymentLabel: 'Pagar na retirada',
+    paymentLabel: 'Saldo em aberto',
   });
 
   assert.equal(printView.orderNo, 'AAA000001');

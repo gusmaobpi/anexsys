@@ -2,7 +2,7 @@ export const MAX_SERVICE_ORDER_ITEMS = 5;
 /** 15px (~11 pt) is the largest A5 work font that still fits 5 pieces + the shelf camera. */
 export const OS_WORK_PRINT_FONT_PX = 15;
 export const OS_WORK_PRINT_LINES = 3;
-/** Column S takes ~7% of the A5 table; Detalhamento do ajuste keeps ~55% → ~34 chars/line. */
+/** Column S takes ~7% of the A5 table; Detalhar o serviço keeps ~55% → ~34 chars/line. */
 export const OS_WORK_CHARS_PER_LINE = 34;
 export const OS_WORK_MAX_CHARS = OS_WORK_PRINT_LINES * OS_WORK_CHARS_PER_LINE;
 
@@ -272,6 +272,56 @@ export function getVisibleServiceOrderItemGridRows(rows: ServiceOrderItemGridRow
   return rows.filter((row) => !row.isRemoved);
 }
 
+function blankText(value: string | null | undefined) {
+  return !(value ?? "").trim();
+}
+
+/** Linha nova criada pela grade, sem nenhum dado da peça. A quantidade padrão 1 não conta como conteúdo. */
+export function isNavigationBlankServiceOrderItemRow(row: ServiceOrderItemGridRow) {
+  return row.isNew
+    && !row.isRemoved
+    && !row.productId
+    && !row.serviceId
+    && blankText(row.itemType)
+    && blankText(row.description)
+    && blankText(row.complement)
+    && blankText(row.brand)
+    && blankText(row.model)
+    && blankText(row.serialNo)
+    && blankText(row.unitPrice)
+    && blankText(row.discountValue)
+    && blankText(row.timeMinutes);
+}
+
+export function serviceOrderItemRowsToPersist(rows: ServiceOrderItemGridRow[]) {
+  return getVisibleServiceOrderItemGridRows(rows).filter((row) => !isNavigationBlankServiceOrderItemRow(row));
+}
+
+export function validateServiceOrderItemGrid(
+  rows: ServiceOrderItemGridRow[],
+  options: { requireAtLeastOne: boolean; maxItems: number },
+) {
+  const pieces = serviceOrderItemRowsToPersist(rows);
+  if (options.requireAtLeastOne && pieces.length === 0) {
+    return "Inclua pelo menos uma peça antes de salvar a OS.";
+  }
+  if (pieces.length > options.maxItems) {
+    return `Esta versão da OS aceita no máximo ${options.maxItems} peças. Feche a sacola para abrir a próxima versão.`;
+  }
+  for (const row of pieces) {
+    if (!row.itemType.trim() || !row.description.trim()) {
+      return "Cada peça precisa de produto e serviço antes de salvar.";
+    }
+    if (!row.brand.trim()) {
+      return "Cada peça precisa da marca.";
+    }
+    if (Number(row.quantity) !== 1) {
+      return "Cada linha é uma peça. A quantidade fica em 1.";
+    }
+  }
+  return null;
+}
+
 export function canAddServiceOrderItemGridRow(
   rows: ServiceOrderItemGridRow[],
   maxItems = MAX_SERVICE_ORDER_ITEMS,
@@ -334,7 +384,7 @@ export function calculateServiceOrderLaborTotal(rows: ServiceOrderItemGridRow[])
 }
 
 export function osPaymentConditionLabel(paymentStatus?: string | null) {
-  return paymentStatus === "paid" ? "Pago" : "Pagar na retirada";
+  return paymentStatus === "paid" ? "Pago" : "Saldo em aberto";
 }
 
 export function osReturnKindLabel(kind?: string | null) {
@@ -372,7 +422,7 @@ export function formatOsMoney(value: number) {
 }
 
 export function buildCreateServiceOrderItemsPayload(rows: ServiceOrderItemGridRow[]) {
-  return getVisibleServiceOrderItemGridRows(rows).map(buildPayload);
+  return serviceOrderItemRowsToPersist(rows).map(buildPayload);
 }
 
 export function buildServiceOrderItemMutationPlan(
@@ -383,7 +433,7 @@ export function buildServiceOrderItemMutationPlan(
     mapServiceOrderItemsToGridRows(originalItems).map((row) => [row.persistedItemId, row] as const),
   );
 
-  const create = getVisibleServiceOrderItemGridRows(rows)
+  const create = serviceOrderItemRowsToPersist(rows)
     .filter((row) => row.isNew)
     .map(buildPayload);
 

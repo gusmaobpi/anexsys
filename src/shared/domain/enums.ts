@@ -243,6 +243,13 @@ export enum PaymentMethod {
   OTHER = 'other',
 }
 
+export enum PaymentModality {
+  CREDIT = 'credit',
+  DEBIT = 'debit',
+  PIX = 'pix',
+  VOUCHER = 'voucher',
+}
+
 export enum PaymentDirection {
   INBOUND = 'inbound',
   OUTBOUND = 'outbound',

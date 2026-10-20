@@ -1,6 +1,6 @@
 # Glossário
 
-**Atualizado em:** 09/10/2026
+**Atualizado em:** 19/10/2026
 **Substitui:** os termos espalhados pela documentação antiga (`docs/arquivo/`).
 
 Este glossário vale para as conversas, os documentos e as telas. A coluna "No código" ajuda quem abrir o programa, que usa nomes em inglês.
@@ -16,6 +16,7 @@ Este glossário vale para as conversas, os documentos e as telas. A coluna "No c
 | **Papel** | Conjunto de permissões. Papéis iniciais: recepção, atendente/medidor, produção, qualidade e gerente | `role` |
 | **Escopo** | A quais Empresas e Filiais um usuário tem acesso. Usuário novo nasce **sem nenhuma Filial** até o administrador marcar | `branch scope` |
 | **Comunidade** | Agrupamento de usuários que existe no código. **Congelado**: não concede permissão | `community` |
+| **Grupo de trabalho** | Quem trabalha junto: Atendentes, Gerente, Técnico e Qualidade. Cada pessoa fica em um grupo. **Não muda a permissão**; o acesso continua no papel e na filial | `work_group` |
 | **Administrador da plataforma** | Quem cria Contas. Por enquanto, só o André | permissão `platform.tenants.create` |
 
 ## Atendimento e produção
@@ -28,8 +29,8 @@ Este glossário vale para as conversas, os documentos e as telas. A coluna "No c
 | **Produto** | Tipo da peça no cadastro (Calça, Saia, Vestido de festa, Vestido, Terno, Paletó, Camisa, Jaqueta). A atendente escolhe na linha da OS e pode cadastrar outro | `garment product` |
 | **Serviço** | O que se faz numa peça (bainha, barra, ajuste). Sem preço próprio. Só aparece na OS se estiver vinculado ao produto escolhido | `atelier service` / `service order item` |
 | **Preço (Produto × Serviço)** | Combinação única de produto e serviço com **preço sugerido** e **tempo previsto**. A OS sugere o preço; o atendente pode alterar. O tempo é para o PCP depois e **não** entra no Normal / Expresso / Urgente | `garment_product_services` |
-| **Detalhamento do ajuste** | Texto livre na linha da peça: o que a atendente combinou com o cliente. É o **maior campo da OP** (fonte 15 px, 3 linhas, ~102 caracteres). No código o campo continua `complement`. Na tela, o mouse em cima abre o texto completo | `service_order_items.complement` |
-| **Ordem de Produção** | Papel **A5** da sacola: número da placa no cabeçalho e em cima do QR; **Pago / Pagar na retirada** (ou **Reconserto / Em garantia** no retorno) no cabeçalho; grade em linhas (**S**, Produto, Serviço, Detalhamento do ajuste); bloco **Retirada** (Nome, Data, Assinatura); marca/modelo/série pequenos; previsão enorme na face da prateleira. **Nunca mostra preço nem quantidade**. A bandeja A5 é da impressora; o layout já nasce A5. Reprovação na qualidade gera **outra versão da mesma OP**, só com as peças reprovadas | `production order` / `production_order_versions` |
+| **Detalhar o serviço** | Texto livre na linha da peça: o que a atendente combinou com o cliente. É o **maior campo da OP** (fonte 15 px, 3 linhas, ~102 caracteres). Na ficha nasce com uma linha e cresce com o texto até esse limite. No código o campo continua `complement`. Na tela, o mouse em cima abre o texto completo | `service_order_items.complement` |
+| **Ordem de Produção** | Papel **A5** da sacola: número da placa no cabeçalho e em cima do QR; **Pago / Saldo em aberto** (ou **Reconserto / Em garantia / Refação no balcão** no retorno) no cabeçalho; grade em linhas (**S**, Produto, Serviço, Detalhar o serviço); bloco **Retirada** (Nome, Data, Assinatura); marca/modelo/série pequenos; previsão enorme na face da prateleira. **Nunca mostra preço nem quantidade**. A bandeja A5 é da impressora; o layout já nasce A5. Reprovação na qualidade gera **outra versão da mesma OP**, só com as peças reprovadas | `production order` / `production_order_versions` |
 | **Sacola** | Embalagem **física** só para transportar as peças. O sistema não controla a sacola: controla o **limite de peças por versão da OS**. A OP impressa vai no bolso transparente | `bag` (apenas apoio físico) |
 | **Fechar sacola** | Ação na OS: grava a versão e **trava** as peças. **Não** imprime e **não** abre a próxima versão. O botão vira **Abrir sacola** | `POST /service-orders/:id/close-bag` |
 | **Abrir sacola** | Destrava a versão fechada para corrigir erro ou incluir peça que o cliente pediu de volta | `POST /service-orders/:id/open-bag` |
@@ -44,7 +45,7 @@ Este glossário vale para as conversas, os documentos e as telas. A coluna "No c
 | **OS filha / retorno** | Processo ligado à original. Reconserto/garantia/balcão usam letra na mesma placa. Cobrada (fora do prazo) usa placa nova. Copia as peças escolhidas e o técnico original. Dentro do prazo sai sem valor | `origin_service_order_id` / `return_kind` |
 | **Controle de qualidade** | Tela em que o revisor abre a OS original e aprova ou reprova **peça a peça**, sem valores. O botão da lista é **Revisar**. 100% aprovado avança a OS para Pronto para retirada | `quality-reviews` |
 | **Prova / pré-preparação** | Nova medição depois do corte e da modelagem. A técnica envia a OS **em produção** para **Aguardando prova**. **Mesma OS e mesma versão da OP** — não nasce placa nova, nem `-1`, nem OP de refação. **Prova feita** volta sempre para **Em produção**. A qualidade só entra no **Terminei**. WhatsApp 3 ainda não | `awaiting_proof` / `POST /service-orders/:id/send-to-proof` |
-| **Anotações de prova** | Histórico da nova medição, peça a peça, na mesma OS. Texto opcional (102 caracteres). Não mistura com Observação nem com Detalhamento do ajuste. Se houver texto, a mesma OP é reimpressa com o marcador **Prova** (não é **Refazer**) | `service_order_proof_notes` / `POST /service-orders/:id/complete-proof` |
+| **Anotações de prova** | Histórico da nova medição, peça a peça, na mesma OS. Texto opcional (102 caracteres). Não mistura com Observação nem com Detalhar o serviço. Se houver texto, a mesma OP é reimpressa com o marcador **Prova** (não é **Refazer**) | `service_order_proof_notes` / `POST /service-orders/:id/complete-proof` |
 | **Refação** | Peças reprovadas voltam à esteira numa **nova versão da OP**. A OS original **permanece em Controle de qualidade**. Não confundir com versão da OS (sacola) nem com prova | `production_order_versions` + `rework_cases` |
 | **Esteira** | Lugar físico onde ficam as sacolas: "a fazer" (por ordem de chegada) e "finalizadas" | não existe no sistema |
 | **Pegar sacola** | Função de **Operações**: a técnica pega a sacola da esteira e avança o status (Em produção, Terminei, refação). Fluxo **manual permanente** para quem não usa QR. A leitura do QR, quando existir, dispara o mesmo passo | `POST /service-orders/:id/floor-advance` / `/pick-bag` |
@@ -95,10 +96,11 @@ Este glossário vale para as conversas, os documentos e as telas. A coluna "No c
 | **Limite de peças por versão** | Parâmetro da Conta (padrão 5). A atendente registra até esse limite, fecha a sacola e continua na próxima versão. Não é divisão automática no meio da digitação |
 | **Sugestão de cadastro** | Nos campos de busca e nos que vêm de tabela, o sistema sugere o que já está cadastrado. Se não houver sugestão, **Cadastrar** aparece na caixinha de “Nenhum registro encontrado” |
 | **Tela de parâmetros** | Tela onde o administrador altera as regras do sistema (graus e tempos, prazos, cortes, sobretaxas, status etc.), com histórico de quem mudou e quando |
-| **Forma de pagamento** | O que a atendente anota no balcão: **Dinheiro**, **Cartão na maquininha**, **Pix**, **Transferência** ou **Outro**. Só registro. Sem Cielo, sem QR Pix e sem parcelas nesta fase | `payment_records.payment_method` |
-| **Condição de pagamento** | Na OS e na OP: **Pago** só quando o financeiro está quitado; qualquer saldo (inclusive parcial) sai **Pagar na retirada**. Em OS de retorno dentro do prazo, a OP mostra **Reconserto** ou **Em garantia** no lugar dessa condição |
-| **Pagamento integrado** | A partir da OS, o sistema aciona a maquininha com o valor da OS e recebe o resultado online, sem digitar o valor. Funciona de nuvem a nuvem, pela internet |
-| **Estorno de cartão** | Devolução do pagamento feito na maquininha, pela operadora (Cielo). Só o gerente, com motivo. Não é o reembolso via Pix |
+| **Forma de pagamento** | No pagamento da OS, **Cartão** ou **Interno**. Cartão envia a cobrança à maquininha e pede **Crédito**, **Débito** ou **Pix**; essa escolha vai no pedido da Cielo para a maquininha abrir já nela. Interno é a baixa manual e pede **Dinheiro**, **Crédito**, **Débito** ou **PIX**, mais o motivo. O sistema grava quem baixou, quando, por quê e qual dessas formas foi usada. A baixa reduz o saldo e muda a condição de pagamento (parcial ou pago). O status operacional da OS não muda. O envio só habilita depois da subopção e, no interno, do motivo. O cartão continua exigindo terminal ativo | `payment_records.payment_method` |
+| **Condição de pagamento** | Na OS e na OP: **Pago** quando o saldo em aberto é zero; saldo em aberto é o valor exigível ainda não recebido. Valor suspenso não entra nesse saldo. Em OS de retorno, a OP mostra **Reconserto**, **Em garantia** ou **Refação no balcão** no lugar dessa condição |
+| **Pagamento integrado** | A partir da OS, o sistema aciona a maquininha com o valor da OS e acompanha o resultado pelo tempo máximo da Conta (padrão 3 minutos). Confirmado, a OS quita. Recusado ou cancelado, a OS não quita. Funciona de nuvem a nuvem, pela internet |
+| **Tempo de espera da maquininha** | Quanto tempo o sistema consulta a maquininha depois de enviar a cobrança. Padrão 3 minutos, da Conta, entre 1 e 30. Quem grava pagamentos altera em Configurações → Pagamentos. O histórico guarda quem, quando, o valor anterior e o novo. A consulta continua a cada 5 segundos | `tenants.machine_wait_minutes` |
+| **Estorno de cartão** | Devolução de um pagamento recebido ou liquidado. Só o papel Gerente, com a permissão de estorno e um motivo. O saldo da OS volta a ficar em aberto. No sandbox o valor não volta na maquininha; isso fica para a produção. Não é o reembolso via Pix |
 | **Aprovação pendente** | OS cujo cliente ainda não assinou. Lista sempre visível e aviso diário ao atendente e ao gerente |
 | **Filial padrão** | Primeira Filial filha, criada automaticamente quando a Empresa não tem nenhuma. Nome de tela: Matriz. Pode ser renomeada |
 | **Entrega em domicílio** | Funcionalidade nova, **fora do piloto**, com preço por distância ou geolocalização |
@@ -128,3 +130,16 @@ Este glossário vale para as conversas, os documentos e as telas. A coluna "No c
 | **Piloto completo** | Entrada em produção só com financeiro (pagamento integrado na maquininha) e portal (o link público) prontos, prevista para março de 2027, **sem concierge nem fila de chegada**, com o sistema antigo em paralelo até o André ter confiança |
 | **Homologar** | Testar e aprovar. O André é o homologador de tudo |
 | **MVP** | Primeira versão utilizável. Aqui, equivale ao piloto completo |
+
+## Formulários
+
+Padrão dos cadastros. **Gravar** grava, atualiza a grade e fecha a aba do registro. A tela fica na aba que já estava ao lado. **Gravar e Continuar** faz a mesma gravação, fecha essa aba e abre um cadastro em branco pelo mesmo caminho do botão de adicionar. Se a validação falhar, a ficha permanece aberta. **Cancelar** sai sem gravar.
+
+Na Ordem de Serviço o par vale só na gravação final da sacola fechada, e essa gravação imprime a OP. Com a sacola aberta, **Salvar** e **Salvar alterações** continuam gravando rascunho, sem imprimir a OP.
+
+Ficam de fora deste par: **Vincular** em acesso, **Salvar horário** da filial, **Salvar e selecionar** ao escolher um cliente de dentro de outro formulário, **Cancelar** da qualidade e Comunidade.
+
+| Termo | Significado |
+|---|---|
+| **Gravar** | Grava e fecha a aba deste registro. Na OS, é a gravação final da sacola fechada: imprime a OP, grava a OS e atualiza a grade |
+| **Gravar e Continuar** | A mesma gravação. Em seguida fecha a aba e abre um cadastro em branco, pelo mesmo caminho do botão de adicionar |

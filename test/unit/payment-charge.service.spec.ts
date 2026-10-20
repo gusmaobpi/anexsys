@@ -4,6 +4,7 @@ import { PaymentChargeService } from 'src/modules/finance/application/finance/pa
 import { PaymentProviderRegistry } from 'src/modules/finance/application/finance/payment-provider-registry';
 import { PaymentProviderAdapter } from 'src/modules/finance/contracts/provider/payment-provider.contract';
 import { PaymentProviderRequestError } from 'src/modules/finance/contracts/provider/payment-provider-request-error';
+import { PaymentModality } from 'src/shared/domain/enums';
 import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
 
 type PaymentRow = {
@@ -17,6 +18,9 @@ type PaymentRow = {
   paymentDirection: string;
   paymentAmount: string;
   status: string;
+  billingScopeId?: string;
+  informedModality?: string | null;
+  confirmedModality?: string | null;
   authorizedAt?: Date | null;
   updatedBy?: string;
 };
@@ -26,6 +30,7 @@ function createHarness(options: {
   hasActiveConfig?: boolean;
   configEnvironment?: string;
   rows?: PaymentRow[];
+  serviceOrder?: Record<string, unknown>;
 } = {}) {
   const rows = options.rows ?? [];
   const saved: PaymentRow[] = [];
@@ -37,7 +42,7 @@ function createHarness(options: {
   const service = new PaymentChargeService(
     {
       async getById() {
-        return { id: 'os-1', branchId: 'branch-1', orderNo: 'AAA000001' };
+        return options.serviceOrder ?? { id: 'os-1', branchId: 'branch-1', orderNo: 'AAA000001' };
       },
     } as never,
     {
@@ -66,13 +71,54 @@ function createHarness(options: {
         saved.push({ ...entity });
         return entity;
       },
+      async runInTransaction<T>(callback: (manager: { getRepository: () => { save: (entity: PaymentRow) => Promise<PaymentRow> } }) => Promise<T>) {
+        return callback({
+          getRepository: () => ({
+            async save(entity: PaymentRow) {
+              saved.push({ ...entity });
+              return entity;
+            },
+          }),
+        });
+      },
       async findById(id: string) {
-        return rows.find((row) => row.id === id) ?? null;
+        return rows.find((row) => row.id === id) ?? saved.find((row) => row.id === id) ?? null;
       },
     } as never,
     {
       async record(entry: Record<string, unknown>) {
         auditRecords.push(entry);
+      },
+    } as never,
+    {
+      async assertInboundReceipt(_tenantId: string, _serviceOrderId: string, amount: number) {
+        if (amount > 60.009) {
+          throw new DomainValidationError('O valor não pode superar o saldo em aberto.');
+        }
+        return { billingScopeId: 'os-1', outstandingBalance: '60.00' };
+      },
+      async assertNoPendingCharge(scope: string) {
+        const latest = new Map<string, PaymentRow>();
+        for (const row of saved) {
+          if (row.id) latest.set(row.id, row);
+        }
+        if ([...latest.values()].some((row) => row.billingScopeId === scope && row.status === 'pending')) {
+          throw new DomainValidationError('Já existe uma cobrança aguardando confirmação neste grupo.');
+        }
+      },
+      async getFinancialSummary() {
+        return {
+          serviceOrderId: 'os-1',
+          billingScopeId: 'os-1',
+          orderTotal: '60.00',
+          exigivel: '60.00',
+          suspenso: '0.00',
+          amountPaid: '0.00',
+          outstandingBalance: '60.00',
+          paymentStatus: 'pending',
+          openCharge: null,
+          payments: [],
+        };
       },
     } as never,
   );
@@ -123,6 +169,7 @@ describe('PaymentChargeService', () => {
       tenantId: 'tenant-1',
       serviceOrderId: 'os-1',
       amount: 60,
+      informedModality: PaymentModality.CREDIT,
       actorUserId: 'user-1',
     });
 
@@ -144,6 +191,7 @@ describe('PaymentChargeService', () => {
           tenantId: 'tenant-1',
           serviceOrderId: 'os-1',
           amount: 60,
+          informedModality: PaymentModality.CREDIT,
           actorUserId: 'user-1',
         }),
       DomainValidationError,
@@ -158,6 +206,7 @@ describe('PaymentChargeService', () => {
       tenantId: 'tenant-1',
       serviceOrderId: 'os-1',
       amount: 60,
+      informedModality: PaymentModality.CREDIT,
       actorUserId: 'user-1',
     });
 
@@ -174,6 +223,7 @@ describe('PaymentChargeService', () => {
           tenantId: 'tenant-1',
           serviceOrderId: 'os-1',
           amount: 60,
+          informedModality: PaymentModality.CREDIT,
           actorUserId: 'user-1',
         }),
       DomainValidationError,
@@ -190,6 +240,7 @@ describe('PaymentChargeService', () => {
           tenantId: 'tenant-1',
           serviceOrderId: 'os-1',
           amount: 0,
+          informedModality: PaymentModality.CREDIT,
           actorUserId: 'user-1',
         }),
       DomainValidationError,
@@ -203,6 +254,7 @@ describe('PaymentChargeService', () => {
       tenantId: 'tenant-1',
       serviceOrderId: 'os-1',
       amount: 60,
+      informedModality: PaymentModality.CREDIT,
       actorUserId: 'user-1',
     });
 
@@ -218,6 +270,7 @@ describe('PaymentChargeService', () => {
       tenantId: 'tenant-1',
       serviceOrderId: 'os-1',
       amount: 60,
+      informedModality: PaymentModality.CREDIT,
       actorUserId: 'user-1',
     });
 
@@ -226,11 +279,13 @@ describe('PaymentChargeService', () => {
       environment: string;
       terminalCode: string;
       description: string;
+      informedModality: string;
     };
     assert.deepEqual(request.credentials, { clientId: 'test-client' });
     assert.equal(request.environment, 'sandbox');
     assert.equal(request.terminalCode, 'SN-001');
     assert.equal(request.description, 'OS AAA000001');
+    assert.equal(request.informedModality, PaymentModality.CREDIT);
   });
 
   it('settles a pending charge when the provider confirms the payment', async () => {
@@ -275,7 +330,7 @@ describe('PaymentChargeService', () => {
     const { service, saved, auditRecords } = createHarness({ adapter: failingAdapter });
 
     const error = await service
-      .initiateCharge({ tenantId: 'tenant-1', serviceOrderId: 'os-1', amount: 60, actorUserId: 'user-1' })
+      .initiateCharge({ tenantId: 'tenant-1', serviceOrderId: 'os-1', amount: 60, informedModality: PaymentModality.CREDIT, actorUserId: 'user-1' })
       .catch((caught: unknown) => caught);
 
     assert.ok(error instanceof DomainValidationError);
@@ -375,9 +430,154 @@ describe('PaymentChargeService', () => {
     await assert.rejects(() => service.simulateCharge('tenant-1', 'pay-1', 'user-1'), DomainValidationError);
   });
 
+  it('cancels a pending charge without marking the OS as paid', async () => {
+    const closed: string[] = [];
+    const adapter: PaymentProviderAdapter = {
+      provider: 'cielo' as never,
+      async initiatePayment() {
+        throw new Error('not used');
+      },
+      async reconcileSettlement(referenceNo: string) {
+        return { provider: 'cielo' as never, referenceNo, settled: false, canceled: false };
+      },
+      async cancelOrder(orderId: string) {
+        closed.push(orderId);
+      },
+    };
+    const { service } = createHarness({ adapter, rows: [buildPendingRow()] });
+
+    const result = await service.cancelCharge('tenant-1', 'pay-1', 'user-1');
+
+    assert.deepEqual(closed, ['ch_123']);
+    assert.equal(result.payment.status, 'canceled');
+  });
+
   it('rejects the simulation when the provider has no simulation flow', async () => {
     const { service } = createHarness({ adapter: buildAdapter({ authorized: true }), rows: [buildPendingRow()] });
 
     await assert.rejects(() => service.simulateCharge('tenant-1', 'pay-1', 'user-1'), DomainValidationError);
+  });
+
+  it('keeps the charge pending when the operator call may have created the order', async () => {
+    const failingAdapter: PaymentProviderAdapter = {
+      provider: 'cielo' as never,
+      async initiatePayment() {
+        throw new PaymentProviderRequestError({
+          failureType: 'timeout',
+          exceptionMessage: 'The operation was aborted',
+        });
+      },
+      async reconcileSettlement(referenceNo: string) {
+        return { provider: 'cielo' as never, referenceNo, settled: false };
+      },
+    };
+    const { service, saved } = createHarness({ adapter: failingAdapter });
+
+    await assert.rejects(
+      () =>
+        service.initiateCharge({
+          tenantId: 'tenant-1',
+          serviceOrderId: 'os-1',
+          amount: 60,
+          informedModality: PaymentModality.CREDIT,
+          actorUserId: 'user-1',
+        }),
+      DomainValidationError,
+    );
+    assert.equal(saved[saved.length - 1].status, 'pending');
+  });
+
+  it('refuses a second charge while one is still pending', async () => {
+    const { service } = createHarness({ adapter: buildAdapter({ authorized: false, awaitingTerminal: true }) });
+    await service.initiateCharge({
+      tenantId: 'tenant-1',
+      serviceOrderId: 'os-1',
+      amount: 60,
+      informedModality: PaymentModality.CREDIT,
+      actorUserId: 'user-1',
+    });
+
+    await assert.rejects(
+      () =>
+        service.initiateCharge({
+          tenantId: 'tenant-1',
+          serviceOrderId: 'os-1',
+          amount: 10,
+          informedModality: PaymentModality.DEBIT,
+          actorUserId: 'user-1',
+        }),
+      /aguardando confirmação/,
+    );
+  });
+
+  it('refuses to charge a counter child because the mother keeps the receivable', async () => {
+    const { service, saved } = createHarness({
+      adapter: buildAdapter({ authorized: true }),
+      serviceOrder: { id: 'os-c', branchId: 'branch-1', orderNo: 'AAA000001-C', returnKind: 'counter', versionSuffix: 'C' },
+    });
+
+    await assert.rejects(
+      () =>
+        service.initiateCharge({
+          tenantId: 'tenant-1',
+          serviceOrderId: 'os-c',
+          amount: 10,
+          informedModality: PaymentModality.CREDIT,
+          actorUserId: 'user-1',
+        }),
+      /OS mãe/,
+    );
+    assert.equal(saved.length, 0);
+  });
+
+  it('rejects a charge above the open balance', async () => {
+    const { service } = createHarness({ adapter: buildAdapter({ authorized: true }) });
+    await assert.rejects(
+      () =>
+        service.initiateCharge({
+          tenantId: 'tenant-1',
+          serviceOrderId: 'os-1',
+          amount: 61,
+          informedModality: PaymentModality.CREDIT,
+          actorUserId: 'user-1',
+        }),
+      /saldo em aberto/,
+    );
+  });
+
+  it('keeps the informed modality when the operator confirms another one', async () => {
+    const rows: PaymentRow[] = [
+      {
+        id: 'pay-1',
+        tenantId: 'tenant-1',
+        branchId: 'branch-1',
+        serviceOrderId: 'os-1',
+        paymentReferenceNo: 'ch_123',
+        paymentMethod: 'card',
+        paymentProvider: 'cielo',
+        paymentDirection: 'inbound',
+        paymentAmount: '60.00',
+        status: 'pending',
+        informedModality: PaymentModality.CREDIT,
+      },
+    ];
+    const adapter = buildAdapter({ authorized: true, settled: true });
+    adapter.reconcileSettlement = async (referenceNo: string) => ({
+      provider: 'cielo' as never,
+      referenceNo,
+      settled: true,
+      settledAt: '2026-10-15T14:00:00Z',
+      cardBrand: 'VISA',
+      confirmedModality: PaymentModality.DEBIT,
+      operatorProductCode: 'DEBIT',
+    });
+    const { service, auditRecords } = createHarness({ adapter, rows });
+
+    const result = await service.refreshCharge('tenant-1', 'pay-1', 'user-1');
+
+    assert.equal(result.payment.informedModality, PaymentModality.CREDIT);
+    assert.equal(result.payment.confirmedModality, PaymentModality.DEBIT);
+    assert.equal(result.payment.cardBrand, 'VISA');
+    assert.equal(auditRecords.some((entry) => entry.action === 'modality_mismatch'), true);
   });
 });

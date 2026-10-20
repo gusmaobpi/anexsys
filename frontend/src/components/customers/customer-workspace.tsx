@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
+import { finishCadastroSave, requestCadastroContinue, useCadastroListRefresh, type CadastroSaveIntent } from "@/components/app-shell/cadastro-save-navigation";
 import { useWorkspaceManager, useWorkspaceRegistration, useWorkspaceScopedState } from "@/components/app-shell/workspace-manager";
 import { useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
@@ -368,6 +369,8 @@ export function CustomerWorkspace() {
     }
   }, [apiJson, listQuery]);
 
+  useCadastroListRefresh("/customers", isListWorkspace, loadCustomers);
+
   const loadCustomerDetails = useCallback(
     async (customerId: string) => {
       setDetailLoading(true);
@@ -712,7 +715,22 @@ export function CustomerWorkspace() {
     }
   }, [apiJson, clearCustomerDuplicate, customerForm.cpf, selectedCustomer?.id, showCreateForm]);
 
-  async function handleCreateCustomer(event: FormEvent<HTMLFormElement>) {
+  function finishCustomerSave(intent: CadastroSaveIntent) {
+    finishCadastroSave(intent, { currentTabId, isMobile, closeWorkspace }, {
+      listPath: "/customers",
+      openCreate: () => openCreateCustomerWorkspace(),
+      navigateToList: () => {
+        setShowCreateForm(false);
+        setActiveCustomerId(null);
+        setProfile(null);
+        setMeasurements(null);
+        setDetailError(null);
+        navigateWithinWorkspace("/customers");
+      },
+    });
+  }
+
+  async function handleCreateCustomer(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (customerDuplicateStatus !== "idle") {
       setWorkspaceMessage("Revise a duplicidade detectada do cliente antes de salvar.");
@@ -743,11 +761,9 @@ export function CustomerWorkspace() {
           observations: customerForm.observations || undefined,
         }),
       });
-      setShowCreateForm(false);
-      setWorkspaceMessage("Customer created successfully. The record is now ready for review and the next operational steps.");
-      setCustomerForm(defaultCustomerForm());
       await loadCustomers();
-      await loadCustomerDetails(created.id);
+      setWorkspaceMessage("Cliente gravado.");
+      finishCustomerSave(intent);
     } catch (error) {
       setWorkspaceMessage(formatCustomerSaveError(error));
     } finally {
@@ -755,7 +771,7 @@ export function CustomerWorkspace() {
     }
   }
 
-  async function handleUpdateCustomer(event: FormEvent<HTMLFormElement>) {
+  async function handleUpdateCustomer(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!selectedCustomer) return;
     if (customerDuplicateStatus !== "idle") {
@@ -797,9 +813,9 @@ export function CustomerWorkspace() {
           status: nextStatus,
         }),
       });
-      setWorkspaceMessage("Customer updated successfully.");
       await loadCustomers();
-      await loadCustomerDetails(selectedCustomer.id);
+      setWorkspaceMessage("Cliente gravado.");
+      finishCustomerSave(intent);
     } catch (error) {
       setWorkspaceMessage(error instanceof Error ? error.message : "Customer could not be updated.");
     } finally {
@@ -950,7 +966,17 @@ export function CustomerWorkspace() {
                 />
                 <div className="button-row">
                   <button className="button" disabled={savingCustomer || customerDuplicateStatus !== "idle"} type="submit">
-                    {savingCustomer ? "Salvando…" : "Salvar"}
+                    {savingCustomer ? "Gravando…" : "Gravar"}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    disabled={savingCustomer || customerDuplicateStatus !== "idle"}
+                    onClick={(event) => {
+                      requestCadastroContinue(event, handleCreateCustomer);
+                    }}
+                    type="button"
+                  >
+                    {savingCustomer ? "Gravando…" : "Gravar e Continuar"}
                   </button>
                   <button className="button-secondary" onClick={closeCustomerWorkspace} type="button">
                     Close
@@ -1058,7 +1084,17 @@ export function CustomerWorkspace() {
                       />
                       <div className="button-row">
                         <button className="button" disabled={savingCustomer || customerDuplicateStatus !== "idle"} type="submit">
-                          {savingCustomer ? "Salvando…" : "Salvar alterações"}
+                          {savingCustomer ? "Gravando…" : "Gravar"}
+                        </button>
+                        <button
+                          className="button-secondary"
+                          disabled={savingCustomer || customerDuplicateStatus !== "idle"}
+                          onClick={(event) => {
+                            requestCadastroContinue(event, handleUpdateCustomer);
+                          }}
+                          type="button"
+                        >
+                          {savingCustomer ? "Gravando…" : "Gravar e Continuar"}
                         </button>
                         <button className="button-secondary" onClick={closeCustomerWorkspace} type="button">
                           Close

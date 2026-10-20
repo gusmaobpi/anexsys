@@ -450,13 +450,8 @@ export function CadastroListPanel<T extends { id: string }>({
                           Inativar
                         </button>
                       ) : null}
-                      {onPay ? (
-                        <button
-                          className="button-secondary"
-                          disabled={canPay ? !canPay(row) : false}
-                          onClick={() => onPay(row)}
-                          type="button"
-                        >
+                      {onPay && (canPay ? canPay(row) : true) ? (
+                        <button className="button-secondary" onClick={() => onPay(row)} type="button">
                           Pagar
                         </button>
                       ) : null}

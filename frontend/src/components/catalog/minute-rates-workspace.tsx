@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { finishCadastroSave, requestCadastroContinue, useCadastroListRefresh, type CadastroSaveIntent } from "@/components/app-shell/cadastro-save-navigation";
 import { useWorkspaceManager, useWorkspaceRegistration, useWorkspaceScopedState } from "@/components/app-shell/workspace-manager";
 import { useWorkspacePane, useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
@@ -98,6 +99,8 @@ export function MinuteRatesWorkspace() {
     return () => window.clearTimeout(timeoutId);
   }, [isActivePane, loadRecords, session?.tenantId, activeEmpresaId]);
 
+  useCadastroListRefresh("/minute-rates", isListWorkspace, loadRecords);
+
   const openCreateWorkspace = useCallback(() => {
     const targetPath = "/minute-rates?workspaceMode=new";
     if (isMobile) {
@@ -134,6 +137,14 @@ export function MinuteRatesWorkspace() {
     }, 0);
   }, [closeWorkspace, currentTabId, isMobile, navigateWithinWorkspace, openWorkspaceInNewTab]);
 
+  function finishMinuteRateSave(intent: CadastroSaveIntent) {
+    finishCadastroSave(intent, { currentTabId, isMobile, closeWorkspace }, {
+      listPath: "/minute-rates",
+      openCreate: () => openCreateWorkspace(),
+      navigateToList: () => navigateWithinWorkspace("/minute-rates"),
+    });
+  }
+
   useEffect(() => {
     if (workspaceMode !== "new") {
       return;
@@ -158,7 +169,7 @@ export function MinuteRatesWorkspace() {
     });
   }, [focusRecordId, records, setForm, workspaceMode]);
 
-  async function handleCreate(event: FormEvent) {
+  async function handleCreate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!activeEmpresaId) {
       setMessage("Selecione uma empresa no contexto para cadastrar o valor por minuto.");
@@ -179,7 +190,7 @@ export function MinuteRatesWorkspace() {
           : "Tabela de valor por minuto cadastrada e ativada.",
       );
       await loadRecords();
-      closeFormWorkspace();
+      finishMinuteRateSave(intent);
     } catch (error) {
       setMessage(describeWorkspaceError(error, "A tabela de valor por minuto não pôde ser cadastrada."));
     } finally {
@@ -187,7 +198,7 @@ export function MinuteRatesWorkspace() {
     }
   }
 
-  async function handleUpdate(event: FormEvent) {
+  async function handleUpdate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!activeRecord) {
       return;
@@ -206,7 +217,7 @@ export function MinuteRatesWorkspace() {
       });
       setMessage("Tabela de valor por minuto atualizada.");
       await loadRecords();
-      closeFormWorkspace();
+      finishMinuteRateSave(intent);
     } catch (error) {
       setMessage(describeWorkspaceError(error, "A tabela de valor por minuto não pôde ser atualizada."));
     } finally {
@@ -369,7 +380,17 @@ export function MinuteRatesWorkspace() {
               </p>
               <div className="button-row">
                 <button className="button" disabled={saving} type="submit">
-                  {saving ? "Salvando…" : "Salvar"}
+                  {saving ? "Gravando…" : "Gravar"}
+                </button>
+                <button
+                  className="button-secondary"
+                  disabled={saving}
+                  onClick={(event) => {
+                    requestCadastroContinue(event, workspaceMode === "new" ? handleCreate : handleUpdate);
+                  }}
+                  type="button"
+                >
+                  {saving ? "Gravando…" : "Gravar e Continuar"}
                 </button>
                 <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                   Cancelar

@@ -42,5 +42,5 @@ test('labels return kinds and OP header terms', () => {
   assert.equal(osOpHeaderTerm({ returnKind: 'warranty', paymentStatus: 'pending' }), 'Em garantia');
   assert.equal(osOpHeaderTerm({ returnKind: 'counter', paymentStatus: 'pending' }), 'Refação no balcão');
   assert.equal(osOpHeaderTerm({ returnKind: 'charged', paymentStatus: 'paid' }), 'Pago');
-  assert.equal(osOpHeaderTerm({ returnKind: null, paymentStatus: 'pending' }), 'Pagar na retirada');
+  assert.equal(osOpHeaderTerm({ returnKind: null, paymentStatus: 'pending' }), 'Saldo em aberto');
 });

@@ -8,6 +8,7 @@ import { TenantService } from 'src/modules/tenant/application/tenant/tenant.serv
 import {
   FinancialExceptionStatus,
   PaymentDirection,
+  PaymentModality,
   PaymentRecordStatus,
   ServiceOrderPaymentStatus,
 } from 'src/shared/domain/enums';
@@ -20,12 +21,14 @@ import { ResolveFinancialExceptionDto } from '../../contracts/dto/resolve-financ
 import { SearchActualCashflowDto } from '../../contracts/dto/search-actual-cashflow.dto';
 import { SearchExpectedCashflowDto } from '../../contracts/dto/search-expected-cashflow.dto';
 import { SearchPaymentsDto } from '../../contracts/dto/search-payments.dto';
+import { PaymentProviderConfigService } from './payment-provider-config.service';
 import { FinancialExceptionEntity } from '../../infrastructure/persistence/entities/financial-exception.entity';
 import { PartialPaymentEntity } from '../../infrastructure/persistence/entities/partial-payment.entity';
 import { PaymentRecordEntity } from '../../infrastructure/persistence/entities/payment-record.entity';
 import { FinancialExceptionRepository } from '../../infrastructure/persistence/repositories/financial-exception.repository';
 import { PartialPaymentRepository } from '../../infrastructure/persistence/repositories/partial-payment.repository';
 import { PaymentRecordRepository } from '../../infrastructure/persistence/repositories/payment-record.repository';
+import { assertServiceOrderCanReceive, isCounterFinancialChild } from 'src/modules/service-orders/application/service-order/service-order-finance';
 
 @Injectable()
 export class FinanceService {
@@ -44,6 +47,8 @@ export class FinanceService {
     private readonly branchService: BranchService,
     @Inject(AuditService)
     private readonly auditService: AuditService,
+    @Inject(PaymentProviderConfigService)
+    private readonly configService: PaymentProviderConfigService,
   ) {}
 
   async searchPayments(tenantId: string, filters: SearchPaymentsDto & { accessibleBranchIds: string[] }) {
@@ -82,9 +87,55 @@ export class FinanceService {
     };
   }
 
+  async reversePayment(paymentId: string, tenantId: string, actorUserId: string, reason: string) {
+    const reversalReason = reason.trim();
+    if (!reversalReason) {
+      throw new DomainValidationError('Informe o motivo do estorno.');
+    }
+    const payment = await this.getPaymentById(paymentId, tenantId);
+    if (![PaymentRecordStatus.RECEIVED, PaymentRecordStatus.SETTLED].includes(payment.status)) {
+      throw new DomainValidationError('Só é possível estornar um pagamento recebido ou liquidado.');
+    }
+    payment.status = PaymentRecordStatus.REVERSED;
+    payment.reversalReason = reversalReason;
+    payment.reversedAt = new Date();
+    payment.reversedBy = actorUserId;
+    payment.updatedBy = actorUserId;
+    const saved = await this.paymentRecordRepository.save(payment);
+    await this.auditService.record({
+      tenantId,
+      branchId: saved.branchId,
+      actorUserId,
+      entityType: 'payment_record',
+      entityId: saved.id,
+      action: 'finance.payment.reversed',
+      eventType: 'finance.write',
+      metadata: {
+        serviceOrderId: saved.serviceOrderId,
+        paymentAmount: saved.paymentAmount,
+        reversalReason,
+      },
+    });
+    return this.getFinancialSummary(tenantId, saved.serviceOrderId);
+  }
+
   async createPayment(dto: CreatePaymentDto) {
     const serviceOrderDetails = await this.serviceOrderService.getDetails(dto.tenantId, dto.serviceOrderId);
+    assertServiceOrderCanReceive(serviceOrderDetails.serviceOrder);
     const status = dto.status ?? PaymentRecordStatus.RECEIVED;
+    const direction = dto.paymentDirection ?? PaymentDirection.INBOUND;
+    const manualReason = dto.manualReason?.trim() || null;
+    const manualReceipt =
+      !dto.paymentProvider &&
+      direction === PaymentDirection.INBOUND &&
+      [PaymentRecordStatus.RECEIVED, PaymentRecordStatus.SETTLED].includes(status);
+    if (manualReceipt && !manualReason) {
+      throw new DomainValidationError('Informe o motivo da baixa manual.');
+    }
+    const billingScopeId = serviceOrderDetails.serviceOrder.groupId ?? serviceOrderDetails.serviceOrder.id;
+    if (direction === PaymentDirection.INBOUND && this.countsAsReceipt(status)) {
+      await this.assertInboundReceipt(dto.tenantId, dto.serviceOrderId, dto.paymentAmount);
+    }
     const receivedAt = dto.receivedAt
       ? new Date(dto.receivedAt)
       : [PaymentRecordStatus.RECEIVED, PaymentRecordStatus.SETTLED].includes(status)
@@ -95,10 +146,15 @@ export class FinanceService {
       tenantId: dto.tenantId,
       branchId: serviceOrderDetails.serviceOrder.branchId,
       serviceOrderId: dto.serviceOrderId,
+      billingScopeId,
+      informedModality: dto.informedModality ?? null,
+      confirmedModality: null,
+      operatorProductCode: null,
       paymentReferenceNo: dto.paymentReferenceNo?.trim() || null,
       paymentMethod: dto.paymentMethod,
       paymentProvider: dto.paymentProvider ?? null,
-      paymentDirection: dto.paymentDirection ?? PaymentDirection.INBOUND,
+      manualReason,
+      paymentDirection: direction,
       paymentAmount: this.formatMoney(dto.paymentAmount),
       receivedAt,
       authorizedAt: dto.authorizedAt ? new Date(dto.authorizedAt) : null,
@@ -108,6 +164,9 @@ export class FinanceService {
       updatedBy: dto.actorUserId,
     });
     const { savedPayment, savedAllocations } = await this.paymentRecordRepository.runInTransaction(async (manager) => {
+      if (direction === PaymentDirection.INBOUND && status === PaymentRecordStatus.PENDING) {
+        await this.assertNoPendingCharge(billingScopeId, manager);
+      }
       const savedPayment = await manager.getRepository(PaymentRecordEntity).save(payment);
       const savedAllocations = await this.persistAllocations(
         savedPayment,
@@ -131,6 +190,8 @@ export class FinanceService {
         serviceOrderId: savedPayment.serviceOrderId,
         paymentAmount: savedPayment.paymentAmount,
         paymentMethod: savedPayment.paymentMethod,
+        informedModality: savedPayment.informedModality,
+        manualReason: savedPayment.manualReason,
       },
     });
     return {
@@ -178,6 +239,25 @@ export class FinanceService {
       this.partialPaymentRepository.findByServiceOrder(serviceOrderId),
     ]);
 
+    if (isCounterFinancialChild(details.serviceOrder)) {
+      return {
+        serviceOrderId,
+        billingScopeId: details.serviceOrder.groupId ?? details.serviceOrder.id,
+        orderTotal: '0.00',
+        exigivel: '0.00',
+        suspenso: '0.00',
+        amountPaid: '0.00',
+        outstandingBalance: '0.00',
+        unallocatedPaymentAmount: '0.00',
+        paymentStatus: ServiceOrderPaymentStatus.PAID,
+        paymentTermsDays: details.serviceOrder.paymentTermsDays,
+        deliveryBlocked: false,
+        openCharge: null,
+        payments: [],
+        items: [],
+      };
+    }
+
     const members =
       typeof this.serviceOrderService.listGroupMembers === 'function'
         ? await this.serviceOrderService.listGroupMembers(tenantId, serviceOrderId)
@@ -198,8 +278,12 @@ export class FinanceService {
       members.length > 1
         ? members.reduce((sum, member) => sum + this.toMoney(member.totalValue ?? '0'), 0)
         : this.toMoney(details.serviceOrder.totalValue ?? this.calculateItemsTotal(details.items));
+    const heldItems = await this.loadGroupItems(tenantId, serviceOrderId, members, details.items);
+    const suspendedAmount = this.calculateSuspendedAmount(heldItems);
+    const chargeableTotal = Math.max(Number((orderTotal - suspendedAmount).toFixed(2)), 0);
     const amountPaid = this.calculateNetPaid(groupPayments);
-    const outstandingBalance = Math.max(orderTotal - amountPaid, 0);
+    const outstandingBalance = Math.max(Number((chargeableTotal - amountPaid).toFixed(2)), 0);
+    const openCharge = groupPayments.find((payment) => payment.status === PaymentRecordStatus.PENDING) ?? null;
     const effectivePayments = new Map(
       groupPayments
         .filter((payment) => ![PaymentRecordStatus.FAILED, PaymentRecordStatus.REVERSED, PaymentRecordStatus.PENDING, PaymentRecordStatus.CANCELED].includes(payment.status))
@@ -234,7 +318,7 @@ export class FinanceService {
         : ServiceOrderPaymentStatus.PENDING;
 
     const recordedPayments = groupPayments
-      .filter((payment) => ![PaymentRecordStatus.FAILED, PaymentRecordStatus.REVERSED, PaymentRecordStatus.PENDING, PaymentRecordStatus.CANCELED].includes(payment.status))
+      .filter((payment) => ![PaymentRecordStatus.FAILED, PaymentRecordStatus.CANCELED].includes(payment.status))
       .slice()
       .sort((left, right) => {
         const leftTime = new Date(left.receivedAt ?? left.createdAt).getTime();
@@ -247,20 +331,80 @@ export class FinanceService {
         paymentAmount: payment.paymentAmount,
         receivedAt: payment.receivedAt,
         status: payment.status,
+        informedModality: payment.informedModality ?? null,
+        confirmedModality: payment.confirmedModality ?? null,
+        paymentProvider: payment.paymentProvider ?? null,
+        manualReason: payment.manualReason ?? null,
+        reversalReason: payment.reversalReason ?? null,
       }));
 
     return {
       serviceOrderId,
+      billingScopeId: details.serviceOrder.groupId ?? details.serviceOrder.id,
       orderTotal: this.formatMoney(orderTotal),
+      exigivel: this.formatMoney(chargeableTotal),
+      suspenso: this.formatMoney(suspendedAmount),
       amountPaid: this.formatMoney(amountPaid),
       outstandingBalance: this.formatMoney(outstandingBalance),
       unallocatedPaymentAmount: this.formatMoney(Math.max(amountPaid - allocatedAmount, 0)),
       paymentStatus,
       paymentTermsDays: details.serviceOrder.paymentTermsDays,
       deliveryBlocked: tenant.blockDeliveryWithOutstandingBalance && outstandingBalance > 0,
+      openCharge: openCharge
+        ? {
+            id: openCharge.id,
+            status: openCharge.status,
+            paymentAmount: openCharge.paymentAmount,
+            informedModality: openCharge.informedModality ?? null,
+            confirmedModality: openCharge.confirmedModality ?? null,
+            environment: await this.chargeEnvironment(tenantId, openCharge),
+          }
+        : null,
       payments: recordedPayments,
       items,
     };
+  }
+
+  private async chargeEnvironment(tenantId: string, payment: PaymentRecordEntity): Promise<string | null> {
+    if (!payment.paymentProvider || !this.configService) {
+      return null;
+    }
+    try {
+      const branch = await this.branchService.getById(payment.branchId);
+      const companyId = (branch as { companyId?: string }).companyId;
+      if (!companyId) {
+        return null;
+      }
+      const config = await this.configService.getActiveConfig(tenantId, companyId, payment.paymentProvider);
+      return config?.environment ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async assertInboundReceipt(tenantId: string, serviceOrderId: string, amount: number) {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new DomainValidationError('Informe o valor da cobrança.');
+    }
+    const summary = await this.getFinancialSummary(tenantId, serviceOrderId);
+    if (summary.openCharge) {
+      throw new DomainValidationError('Já existe uma cobrança aguardando confirmação neste grupo.');
+    }
+    const outstanding = this.toMoney(summary.outstandingBalance);
+    if (outstanding <= 0) {
+      throw new DomainValidationError('Não há saldo em aberto para cobrar.');
+    }
+    if (amount - outstanding > 0.009) {
+      throw new DomainValidationError('O valor não pode superar o saldo em aberto.');
+    }
+    return summary;
+  }
+
+  async assertNoPendingCharge(billingScopeId: string, manager?: EntityManager) {
+    const pending = await this.paymentRecordRepository.findPendingByBillingScope(billingScopeId, manager);
+    if (pending) {
+      throw new DomainValidationError('Já existe uma cobrança aguardando confirmação neste grupo.');
+    }
   }
 
   async createFinancialException(dto: CreateFinancialExceptionDto): Promise<FinancialExceptionEntity> {
@@ -496,6 +640,34 @@ export class FinanceService {
       allocations.push({ allocatedAmount: Number(remaining.value.toFixed(2)) });
     }
     return allocations;
+  }
+
+  private countsAsReceipt(status: PaymentRecordStatus) {
+    return ![PaymentRecordStatus.FAILED, PaymentRecordStatus.CANCELED, PaymentRecordStatus.REVERSED].includes(status);
+  }
+
+  private async loadGroupItems(
+    tenantId: string,
+    serviceOrderId: string,
+    members: Array<{ id: string }>,
+    currentItems: Array<{ heldForRework?: boolean; status?: string; isDeleted?: boolean; quantity: string; unitPrice: string | null; discountValue: string | null }>,
+  ) {
+    if (members.length <= 1 || typeof this.serviceOrderService.getDetails !== 'function') {
+      return currentItems;
+    }
+    const details = await Promise.all(members.map((member) => this.serviceOrderService.getDetails(tenantId, member.id)));
+    return details.flatMap((detail) => detail.items ?? []);
+  }
+
+  private calculateSuspendedAmount(
+    items: Array<{ heldForRework?: boolean; status?: string; isDeleted?: boolean; quantity: string; unitPrice: string | null; discountValue: string | null }>,
+  ) {
+    return items.reduce((sum, item) => {
+      if (!item.heldForRework || item.isDeleted || item.status === 'cancelled') {
+        return sum;
+      }
+      return sum + Math.max(this.calculateItemTotal(item), 0);
+    }, 0);
   }
 
   private calculateNetPaid(payments: PaymentRecordEntity[]) {

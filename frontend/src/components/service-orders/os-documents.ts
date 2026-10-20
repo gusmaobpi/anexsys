@@ -364,7 +364,7 @@ function formatCustomerAddress(customer: OpPrintView["customer"]) {
 export function buildProductionOrderPrintHtml(
   view: OpPrintView,
   companyName: string,
-  paymentCondition = "Pagar na retirada",
+  paymentCondition = "Saldo em aberto",
 ) {
   const shelf = opShelfDateParts(view.serviceOrder.promisedDeliveryDate);
   const qr = view.qrCode?.codeValue ?? "";
@@ -416,7 +416,7 @@ export function buildProductionOrderPrintHtml(
           <th title="Sequência">S</th>
           <th>Produto</th>
           <th>Serviço</th>
-          <th>Detalhamento do ajuste</th>
+          <th>Detalhar o serviço</th>
         </tr>
       </thead>
       <tbody>${items}</tbody>
@@ -479,7 +479,7 @@ export function buildServiceOrderPrintHtml(view: OsPrintView, companyName: strin
          : ""
      }
      <table>
-       <thead><tr><th title="Sequência">S</th><th>Produto</th><th>Serviço</th><th>Detalhamento do ajuste</th><th>Qtd</th><th>Valor</th><th>Desconto</th><th>Subtotal</th></tr></thead>
+       <thead><tr><th title="Sequência">S</th><th>Produto</th><th>Serviço</th><th>Detalhar o serviço</th><th>Qtd</th><th>Valor</th><th>Desconto</th><th>Subtotal</th></tr></thead>
        <tbody>${rows}</tbody>
      </table>
      <p class="total">Valor total ${escapeHtml(view.totalValue ? formatOsMoney(Number(view.totalValue)) : "R$ 0,00")}</p>
@@ -494,7 +494,7 @@ export function printProductionOrderDocument(
   view: OpPrintView,
   companyName: string,
   reservedWindow?: Window | null,
-  paymentCondition = "Pagar na retirada",
+  paymentCondition = "Saldo em aberto",
 ) {
   openPrintWindow(
     `OP ${view.serviceOrder.orderNo}`,

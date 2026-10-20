@@ -54,7 +54,7 @@ test('builds the A5 OP with the shelf face and without prices or quantity', () =
       qrCode: { codeValue: 'AAA000001', reissueNo: 0 },
     },
     'Atelier de costura Iza Gusmão',
-    'Pagar na retirada',
+    'Saldo em aberto',
   );
 
   assert.match(html, /Entrada/);
@@ -63,7 +63,7 @@ test('builds the A5 OP with the shelf face and without prices or quantity', () =
   assert.match(html, /<th title="Sequência">S<\/th>/);
   assert.match(html, /<th>Produto<\/th>/);
   assert.match(html, /<th>Serviço<\/th>/);
-  assert.match(html, /<th>Detalhamento do ajuste<\/th>/);
+  assert.match(html, /<th>Detalhar o serviço<\/th>/);
   assert.match(html, /class="op-seq">1/);
   assert.match(html, /class="op-seq">2/);
   assert.match(html, /class="op-seq">3/);
@@ -76,7 +76,7 @@ test('builds the A5 OP with the shelf face and without prices or quantity', () =
   assert.match(OP_A5_PRINT_CSS, /nth-child\(1\)[^{]*\{ width: 7%;/);
   assert.match(html, /Ajuste de cintura/);
   assert.match(html, /class="op-item__equip">Zara · Festa · SN-22/);
-  assert.match(html, /class="op-pay">Pagar na retirada/);
+  assert.match(html, /class="op-pay">Saldo em aberto/);
   assert.match(html, /class="op-pickup__title">Retirada/);
   assert.match(html, /class="op-pickup__field">Nome/);
   assert.match(html, /class="op-pickup__field">Data/);
@@ -100,7 +100,7 @@ test('builds the A5 OP with the shelf face and without prices or quantity', () =
     },
     'Atelier',
   );
-  assert.match(unpaidDefault, /Pagar na retirada/);
+  assert.match(unpaidDefault, /Saldo em aberto/);
 
   const paidHtml = buildProductionOrderPrintHtml(
     {
@@ -116,7 +116,7 @@ test('builds the A5 OP with the shelf face and without prices or quantity', () =
     'Pago',
   );
   assert.match(paidHtml, /class="op-pay">Pago</);
-  assert.doesNotMatch(paidHtml, /Pagar na retirada/);
+  assert.doesNotMatch(paidHtml, /Saldo em aberto/);
 
   const reconsertoHtml = buildProductionOrderPrintHtml(
     {
@@ -152,7 +152,7 @@ test('builds the A5 OP with the shelf face and without prices or quantity', () =
       version: { versionNo: 2, versionReason: 'rework' },
     },
     'Atelier',
-    'Pagar na retirada',
+    'Saldo em aberto',
   );
   assert.match(reworkHtml, /Refação · versão 2/);
   assert.match(reworkHtml, /Ajuste de cintura/);
@@ -178,7 +178,7 @@ test('builds the A5 OP with the shelf face and without prices or quantity', () =
       qrCode: null,
     },
     'Atelier',
-    'Pagar na retirada',
+    'Saldo em aberto',
   );
   assert.match(proofHtml, /class="op-item__proof-label">Prova/);
   assert.match(proofHtml, /subir 1 cm na barra/);
@@ -218,7 +218,7 @@ test('builds the public OS sheet with the same fields as the printed service ord
   );
 
   assert.match(html, /Ordem de serviço AAA000001/);
-  assert.match(html, /<th>Detalhamento do ajuste<\/th>/);
+  assert.match(html, /<th>Detalhar o serviço<\/th>/);
   assert.match(html, /Sandra Legramanti/);
   assert.match(html, /Pronto para retirada/);
   assert.match(html, /Bainha/);

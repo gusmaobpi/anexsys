@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { finishCadastroSave, requestCadastroContinue, useCadastroListRefresh, type CadastroSaveIntent } from "@/components/app-shell/cadastro-save-navigation";
 import { useWorkspaceManager, useWorkspaceRegistration, useWorkspaceScopedState } from "@/components/app-shell/workspace-manager";
 import { useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
@@ -147,6 +148,8 @@ export function MeasurementMasterDataWorkspace({ mode }: Props) {
     return () => window.clearTimeout(timeoutId);
   }, [loadRecords]);
 
+  useCadastroListRefresh(basePath, isListWorkspace, loadRecords);
+
   const clearDuplicate = useCallback(() => {
     setDuplicateStatus("idle");
     setDuplicateMatch(null);
@@ -210,6 +213,14 @@ export function MeasurementMasterDataWorkspace({ mode }: Props) {
       closeWorkspace(closingTabId);
     }, 0);
   }, [basePath, closeWorkspace, config.title, currentTabId, isMobile, navigateWithinWorkspace, openWorkspaceInNewTab]);
+
+  function finishMeasurementSave(intent: CadastroSaveIntent) {
+    finishCadastroSave(intent, { currentTabId, isMobile, closeWorkspace }, {
+      listPath: basePath,
+      openCreate: () => openCreateWorkspace(),
+      navigateToList: () => navigateWithinWorkspace(basePath),
+    });
+  }
 
   const handleInactivateRecord = useCallback(
     async (record: MeasurementListRecord) => {
@@ -347,7 +358,7 @@ export function MeasurementMasterDataWorkspace({ mode }: Props) {
     clearDuplicate();
   }, [clearDuplicate, focusRecordId, records, setForm, workspaceMode]);
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  async function handleCreate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWrite) return;
     if (duplicateStatus !== "idle") {
@@ -367,9 +378,8 @@ export function MeasurementMasterDataWorkspace({ mode }: Props) {
       });
       const mapped = toListRecord(created);
       setRecords((current) => [...current, mapped].sort((left, right) => left.sortOrder - right.sortOrder || left.displayName.localeCompare(right.displayName)));
-      setForm(mapRecordToForm(mapped));
-      navigateWithinWorkspace(`${basePath}?focusRecordId=${encodeURIComponent(mapped.id)}`);
       setMessage(mode === "body-parts" ? "Parte do corpo criada." : "Unidade de medida criada.");
+      finishMeasurementSave(intent);
     } catch (error) {
       setMessage(describeWorkspaceError(error, `A ${config.entityLabel} não pôde ser criada.`));
     } finally {
@@ -377,7 +387,7 @@ export function MeasurementMasterDataWorkspace({ mode }: Props) {
     }
   }
 
-  async function handleUpdate(event: FormEvent<HTMLFormElement>) {
+  async function handleUpdate(event: { preventDefault(): void }, intent: CadastroSaveIntent = "close") {
     event.preventDefault();
     if (!canWrite || !activeRecord) return;
     if (duplicateStatus !== "idle") {
@@ -400,8 +410,8 @@ export function MeasurementMasterDataWorkspace({ mode }: Props) {
       );
       const mapped = toListRecord(updated);
       setRecords((current) => current.map((record) => (record.id === mapped.id ? mapped : record)));
-      setForm(mapRecordToForm(mapped));
       setMessage(mode === "body-parts" ? "Parte do corpo atualizada." : "Unidade de medida atualizada.");
+      finishMeasurementSave(intent);
     } catch (error) {
       setMessage(describeWorkspaceError(error, `A ${config.entityLabel} não pôde ser atualizada.`));
     } finally {
@@ -565,7 +575,17 @@ export function MeasurementMasterDataWorkspace({ mode }: Props) {
               </label>
               <div className="button-row">
                 <button className="button" disabled={saving || duplicateStatus !== "idle"} type="submit">
-                  {saving ? "Salvando…" : workspaceMode === "new" ? "Salvar" : "Salvar alterações"}
+                  {saving ? "Gravando…" : "Gravar"}
+                </button>
+                <button
+                  className="button-secondary"
+                  disabled={saving || duplicateStatus !== "idle"}
+                  onClick={(event) => {
+                    requestCadastroContinue(event, workspaceMode === "new" ? handleCreate : handleUpdate);
+                  }}
+                  type="button"
+                >
+                  {saving ? "Gravando…" : "Gravar e Continuar"}
                 </button>
                 <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                   Cancelar

@@ -15,7 +15,7 @@ export function HoverPeek({ text, children, className }: HoverPeekProps) {
   const [pos, setPos] = useState({ top: 0, left: 0 });
 
   useEffect(() => {
-    if (!open || !wrapRef.current) {
+    if (!open || !trimmed || !wrapRef.current) {
       return;
     }
     const rect = wrapRef.current.getBoundingClientRect();
@@ -26,26 +26,25 @@ export function HoverPeek({ text, children, className }: HoverPeekProps) {
     setPos({ top, left });
   }, [open, trimmed]);
 
-  if (!trimmed) {
-    return <>{children}</>;
-  }
-
   const show = () => {
-    if (wrapRef.current?.contains(document.activeElement)) {
+    if (!trimmed || wrapRef.current?.contains(document.activeElement)) {
       return;
     }
     setOpen(true);
   };
 
+  // O invólucro permanece um span com ou sem texto. Trocar para fragmento no primeiro caractere remonta o campo e perde o foco.
+
   return (
     <span
       className={`hover-peek${className ? ` ${className}` : ""}`}
+      onFocus={() => setOpen(false)}
       onMouseEnter={show}
       onMouseLeave={() => setOpen(false)}
       ref={wrapRef}
     >
       {children}
-      {open ? (
+      {open && trimmed ? (
         <span className="hover-peek__tip" role="tooltip" style={{ left: pos.left, top: pos.top }}>
           {trimmed}
         </span>
