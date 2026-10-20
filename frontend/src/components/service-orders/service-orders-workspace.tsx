@@ -3206,7 +3206,7 @@ export function ServiceOrdersWorkspace() {
                       >
                         Fechar sacola
                       </button>
-                      <button className="button-secondary" onClick={closeServiceOrderWorkspace} type="button">
+                      <button className="button-secondary" onClick={() => closeServiceOrderWorkspace()} type="button">
                         Cancelar
                       </button>
                     </>
@@ -3237,7 +3237,7 @@ export function ServiceOrdersWorkspace() {
                         Abrir sacola
                       </button>
                       ) : null}
-                      <button className="button-secondary" onClick={closeServiceOrderWorkspace} type="button">
+                      <button className="button-secondary" onClick={() => closeServiceOrderWorkspace()} type="button">
                         Cancelar
                       </button>
                       {canSendToProof(selectedOrder.status, bagClosed) && canWriteProof ? (
@@ -3330,7 +3330,7 @@ export function ServiceOrdersWorkspace() {
                       >
                         Fechar sacola
                       </button>
-                      <button className="button-secondary" onClick={closeServiceOrderWorkspace} type="button">
+                      <button className="button-secondary" onClick={() => closeServiceOrderWorkspace()} type="button">
                         Cancelar
                       </button>
                       {canRecordOsApproval(selectedOrder.status) && canWrite ? (
@@ -3367,3 +3367,5 @@ export function ServiceOrdersWorkspace() {
     </>
   );
 }
+
+export default ServiceOrdersWorkspace;
