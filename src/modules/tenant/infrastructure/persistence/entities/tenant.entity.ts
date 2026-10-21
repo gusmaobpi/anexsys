@@ -20,10 +20,10 @@ export class TenantEntity extends SoftDeletableBusinessEntity {
   @Column({ name: 'warranty_adjustment_period_days', type: 'integer', default: 7 })
   warrantyAdjustmentPeriodDays!: number;
 
-  @Column({ name: 'warranty_execution_period_days', type: 'integer', default: 7 })
+  @Column({ name: 'warranty_execution_period_days', type: 'integer', default: 90 })
   warrantyExecutionPeriodDays!: number;
 
-  @Column({ name: 'block_delivery_with_outstanding_balance', type: 'boolean', default: false })
+  @Column({ name: 'block_delivery_with_outstanding_balance', type: 'boolean', default: true })
   blockDeliveryWithOutstandingBalance!: boolean;
 
   @Column({ name: 'machine_wait_minutes', type: 'integer', default: 3 })

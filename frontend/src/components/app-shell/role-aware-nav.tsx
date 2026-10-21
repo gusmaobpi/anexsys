@@ -133,6 +133,18 @@ const navSections: NavSection[] = [
         hint: "Operadoras e credenciais por empresa",
         requiredPermissions: ["finance.read"],
       },
+      {
+        href: "/settings/whatsapp",
+        label: "WhatsApp",
+        hint: "Número, modelos e horário de envio",
+        requiredPermissions: ["whatsapp.write"],
+      },
+      {
+        href: "/settings/email",
+        label: "E-mail",
+        hint: "Caixa de saída da Conta",
+        requiredPermissions: ["email.write"],
+      },
     ],
   },
   {
@@ -143,6 +155,12 @@ const navSections: NavSection[] = [
         label: "Ordens de serviço",
         hint: "Gestão operacional de ordens",
         requiredPermissions: ["service_orders.read"],
+      },
+      {
+        href: "/whatsapp-notices",
+        label: "Avisos",
+        hint: "Fila e falhas das mensagens ao cliente",
+        requiredPermissions: ["whatsapp.read"],
       },
       {
         href: "/pick-bag",
@@ -166,7 +184,7 @@ const navSections: NavSection[] = [
       {
         href: "/floor-schedule",
         label: "Grade de planejamento",
-        hint: "Escala da semana, quinzena ou mês",
+        hint: "Período com os colaboradores de cada dia",
         requiredPermissions: ["floor_schedule.write"],
       },
       {

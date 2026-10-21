@@ -63,6 +63,11 @@ const ALL_PERMISSION_CODES = [
   'users.write',
   'warranty.read',
   'warranty.write',
+  'whatsapp.read',
+  'whatsapp.resend',
+  'whatsapp.write',
+  'email.write',
+  'service_orders.release',
 ];
 
 function requiredEnv(name) {

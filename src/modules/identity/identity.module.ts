@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthorizationModule } from 'src/modules/authorization/authorization.module';
+import { EmailModule } from 'src/modules/email/email.module';
 import { AuditModule } from 'src/modules/audit/audit.module';
 import { BranchModule } from 'src/modules/branch/branch.module';
 import { TenantModule } from 'src/modules/tenant/tenant.module';
@@ -38,6 +39,7 @@ import { UserSessionRepository } from './infrastructure/persistence/repositories
     TenantModule,
     BranchModule,
     forwardRef(() => AuthorizationModule),
+    EmailModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {

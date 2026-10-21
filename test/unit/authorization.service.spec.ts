@@ -61,6 +61,9 @@ function createService(overrides: Record<string, unknown> = {}) {
       async getById() {
         return { id: 'user-1', tenantId: 'tenant-1' };
       },
+      async userIsMaster() {
+        return false;
+      },
     },
     branchService: {
       async listByTenant() {
@@ -351,7 +354,7 @@ describe('AuthorizationService', () => {
     const service = createService({
       roleRepository: { async findById() { return { id: 'role-1', tenantId: 'tenant-a' }; } },
       userRoleAssignmentRepository: { async findActiveAssignment() { return { id: 'assignment-1' }; } },
-      identityService: { async getById() { return { id: 'user-1', tenantId: 'tenant-a' }; } },
+      identityService: { async getById() { return { id: 'user-1', tenantId: 'tenant-a' }; }, async userIsMaster() { return false; } },
     });
 
     await assert.rejects(
@@ -384,7 +387,7 @@ describe('AuthorizationService', () => {
   it('rejects duplicate branch scope assignments', async () => {
     const service = createService({
       userBranchScopeRepository: { async findByUserBranchAndScope() { return { id: 'scope-1' }; } },
-      identityService: { async getById() { return { id: 'user-1', tenantId: 'tenant-a' }; } },
+      identityService: { async getById() { return { id: 'user-1', tenantId: 'tenant-a' }; }, async userIsMaster() { return false; } },
       branchService: { async getById() { return { id: 'branch-1', tenantId: 'tenant-a' }; } },
     });
 
@@ -404,7 +407,7 @@ describe('AuthorizationService', () => {
   it('rejects cross-tenant role assignments', async () => {
     const service = createService({
       roleRepository: { async findById() { return { id: 'role-1', tenantId: 'tenant-b' }; } },
-      identityService: { async getById() { return { id: 'user-1', tenantId: 'tenant-a' }; } },
+      identityService: { async getById() { return { id: 'user-1', tenantId: 'tenant-a' }; }, async userIsMaster() { return false; } },
     });
 
     await assert.rejects(
@@ -422,7 +425,7 @@ describe('AuthorizationService', () => {
   it('rejects role assignments to a branch from a different tenant', async () => {
     const service = createService({
       roleRepository: { async findById() { return { id: 'role-1', tenantId: 'tenant-a' }; } },
-      identityService: { async getById() { return { id: 'user-1', tenantId: 'tenant-a' }; } },
+      identityService: { async getById() { return { id: 'user-1', tenantId: 'tenant-a' }; }, async userIsMaster() { return false; } },
       branchService: { async getById() { return { id: 'branch-1', tenantId: 'tenant-b' }; } },
     });
 

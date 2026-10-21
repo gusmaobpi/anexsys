@@ -117,11 +117,14 @@ type ServiceOrderDetail = {
     paymentTermsDays: number;
     commercialNotes: string | null;
     customerNotes: string | null;
+    originFloorNames?: string | null;
+    chargeWaivedReason?: string | null;
   };
   customer: {
     legalName: string;
     phone: string | null;
     email: string | null;
+    whatsappConsent?: boolean;
   };
   commercialResponsible?: ActorSummary | null;
   productionTechnician?: ActorSummary | null;
@@ -143,6 +146,12 @@ type ServiceOrderDetail = {
     daysSincePickup: number;
     adjustmentPeriodDays: number;
     executionPeriodDays: number;
+  } | null;
+  floorFinishNames?: string[];
+  deliveryRelease?: {
+    releasedAt?: string | Date | null;
+    reason?: string | null;
+    releasedByName?: string | null;
   } | null;
   proofNotes?: Array<{
     batchId: string;
@@ -350,6 +359,7 @@ export function ServiceOrdersWorkspace() {
   const openApproval = searchParams.get("openApproval") === "1";
   const canRead = hasAnyPermission("service_orders.read");
   const canWrite = hasAnyPermission("service_orders.write");
+  const canRelease = hasAnyPermission("service_orders.release");
   const canReadCustomers = hasAnyPermission("customers.read");
   const canWriteCustomers = hasAnyPermission("customers.write");
   const canReadUsers = hasAnyPermission("users.read");
@@ -1040,28 +1050,6 @@ export function ServiceOrdersWorkspace() {
     visibleItemRows.length,
   ]);
 
-  const handleStartPickup = useCallback(async () => {
-    if (!canWrite || !selectedOrder) {
-      return;
-    }
-    setSaving(true);
-    setMessage(null);
-    try {
-      const next = await apiJson<ServiceOrderDetail>(`/service-orders/${selectedOrder.id}/pickup/start`, {
-        method: "POST",
-      });
-      await loadOrders(isListWorkspace ? undefined : next.serviceOrder.id);
-      setPickupPickerOpen(true);
-      setMessage(
-        `Janela de retirada aberta na OS ${next.serviceOrder.orderNo}. O Recebi no link do cliente fica pronto; o envio por WhatsApp entra depois.`,
-      );
-    } catch (error) {
-      setMessage(formatWorkspaceMessage(error, "A retirada não pôde ser iniciada."));
-    } finally {
-      setSaving(false);
-    }
-  }, [apiJson, canWrite, isListWorkspace, loadOrders, selectedOrder]);
-
   const handleCompletePickup = useCallback(
     async (input: {
       method: "paper" | "attendant";
@@ -1558,8 +1546,33 @@ export function ServiceOrdersWorkspace() {
     [isMobile, navigateWithinWorkspace, openWorkspaceInNewTab],
   );
 
+  const handleReleaseDelivery = useCallback(
+    async (reason: string) => {
+      if (!canRelease || !selectedOrder) {
+        return;
+      }
+      setSaving(true);
+      setMessage(null);
+      try {
+        const next = await apiJson<ServiceOrderDetail>(`/service-orders/${selectedOrder.id}/delivery-release`, {
+          method: "POST",
+          body: JSON.stringify({ reason }),
+        });
+        await loadOrders(isListWorkspace ? undefined : next.serviceOrder.id);
+        setMessage(
+          `Entrega da OS ${next.serviceOrder.orderNo} liberada. O saldo continua em aberto e o status da OS não muda.`,
+        );
+      } catch (error) {
+        setMessage(formatWorkspaceMessage(error, "A entrega não pôde ser liberada."));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [apiJson, canRelease, isListWorkspace, loadOrders, selectedOrder],
+  );
+
   const handleClientReturn = useCallback(
-    async (itemIds: string[]) => {
+    async (itemIds: string[], options?: { waiveCharge?: boolean; reason?: string }) => {
       if (!canWrite || !selectedOrder) {
         return;
       }
@@ -1568,7 +1581,11 @@ export function ServiceOrdersWorkspace() {
       try {
         const next = await apiJson<ServiceOrderDetail>(`/service-orders/${selectedOrder.id}/client-return`, {
           method: "POST",
-          body: JSON.stringify({ itemIds }),
+          body: JSON.stringify({
+            itemIds,
+            waiveCharge: options?.waiveCharge === true,
+            reason: options?.reason,
+          }),
         });
         setReturnPickerOpen(false);
         openServiceOrderWorkspace(next.serviceOrder);
@@ -2233,6 +2250,9 @@ export function ServiceOrdersWorkspace() {
                   </button>
                 </p>
               ) : null}
+              {!showCreateForm && details?.customer?.whatsappConsent === false ? (
+                <p className="os-rule-banner">Sem aviso: cliente não autorizou WhatsApp.</p>
+              ) : null}
               {!showCreateForm && details?.origin ? (
                 <p className="table-subtle">
                   Retorno{osReturnKindLabel(selectedOrder?.returnKind) ? ` (${osReturnKindLabel(selectedOrder?.returnKind)})` : ""} da{" "}
@@ -2243,6 +2263,12 @@ export function ServiceOrdersWorkspace() {
                   >
                     {details.origin.orderNo}
                   </button>
+                </p>
+              ) : null}
+              {!showCreateForm && selectedOrder?.returnKind && selectedOrder.returnKind !== "counter" ? (
+                <p className="table-subtle">
+                  Técnica original: {selectedOrder.originFloorNames?.trim() || "Ninguém terminou esta OS no chão."}
+                  {selectedOrder.chargeWaivedReason ? ` · Aberta sem valor. Motivo: ${selectedOrder.chargeWaivedReason}` : ""}
                 </p>
               ) : null}
               {!showCreateForm && details?.linkedReturns && details.linkedReturns.length > 0 ? (
@@ -2299,6 +2325,8 @@ export function ServiceOrdersWorkspace() {
 
           {returnPickerOpen && selectedOrder ? (
             <OsClientReturnPanel
+              canWaiveCharge={canRelease}
+              floorFinishNames={details?.floorFinishNames ?? []}
               items={details?.items ?? []}
               maxPiecesPerBag={maxPiecesPerBag}
               orderNo={selectedOrder.orderNo}
@@ -2306,6 +2334,7 @@ export function ServiceOrdersWorkspace() {
               saving={saving}
               onClose={() => setReturnPickerOpen(false)}
               onConfirm={(itemIds) => handleClientReturn(itemIds)}
+              onWaive={(itemIds, reason) => handleClientReturn(itemIds, { waiveCharge: true, reason })}
             />
           ) : null}
 
@@ -2334,14 +2363,15 @@ export function ServiceOrdersWorkspace() {
 
           {pickupPickerOpen && selectedOrder ? (
             <OsPickupPanel
+              canRelease={canRelease}
+              deliveryRelease={details?.deliveryRelease ?? null}
               orderNo={selectedOrder.orderNo}
               payment={paymentSummary}
               pickup={details?.pickup ?? null}
               saving={saving}
               onClose={() => setPickupPickerOpen(false)}
-              onCopyLink={() => copyPublicLink()}
-              onStart={() => handleStartPickup()}
               onComplete={(input) => handleCompletePickup(input)}
+              onRelease={(reason) => handleReleaseDelivery(reason)}
             />
           ) : null}
 

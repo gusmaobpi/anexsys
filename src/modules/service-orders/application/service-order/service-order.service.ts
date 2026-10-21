@@ -22,6 +22,8 @@ import { CreateServiceOrderItemDto } from '../../contracts/dto/create-service-or
 import { SearchServiceOrdersDto } from '../../contracts/dto/search-service-orders.dto';
 import { UpdateServiceOrderDto } from '../../contracts/dto/update-service-order.dto';
 import { UpdateServiceOrderItemDto } from '../../contracts/dto/update-service-order-item.dto';
+import { enqueueWhatsappNotice } from 'src/modules/whatsapp/application/whatsapp.delivery';
+import { WHATSAPP_OS_OPENED, WHATSAPP_READY } from 'src/modules/whatsapp/application/whatsapp.rules';
 import { AtelierCatalogService } from '../atelier-catalog/atelier-catalog.service';
 import { currentClockTime, normalizeClockTime } from '../delivery-date/clock-time';
 import { DeliveryDateService } from '../delivery-date/delivery-date.service';
@@ -425,7 +427,11 @@ export class ServiceOrderService {
       this.tenantService.getById(tenantId),
     ]);
     const adjustmentPeriodDays = tenant.warrantyAdjustmentPeriodDays ?? 7;
-    const executionPeriodDays = tenant.warrantyExecutionPeriodDays ?? 7;
+    const executionPeriodDays = tenant.warrantyExecutionPeriodDays ?? 90;
+    const floorFinishNames = await this.floorFinishNames(tenantId, serviceOrder.id, serviceOrder.groupId);
+    const deliveryReleasedByName = serviceOrder.deliveryReleasedBy
+      ? await this.actorDisplayName(serviceOrder.deliveryReleasedBy)
+      : null;
     const clientReturnPreview =
       serviceOrder.status === ServiceOrderStatus.PICKED_UP && serviceOrder.actualPickupDate
         ? buildClientReturnPreview(serviceOrder.actualPickupDate, adjustmentPeriodDays, executionPeriodDays)
@@ -466,6 +472,14 @@ export class ServiceOrderService {
         status: order.status,
       })),
       clientReturnPreview,
+      floorFinishNames,
+      deliveryRelease: serviceOrder.deliveryReleasedAt
+        ? {
+            releasedAt: serviceOrder.deliveryReleasedAt,
+            reason: serviceOrder.deliveryReleaseReason,
+            releasedByName: deliveryReleasedByName,
+          }
+        : null,
       proofNotes: await this.buildProofNoteHistory(proofNoteRows, items),
       pickup: await this.buildPickupSummary(serviceOrder, customer.phone ?? null),
       approval: await this.buildApprovalSummary(serviceOrder),
@@ -663,6 +677,7 @@ export class ServiceOrderService {
       eventType: 'service_order.write',
       metadata: { orderNo: saved.orderNo, itemCount: items.length },
     });
+    await this.enqueueWhatsapp(tenantId, saved.id, WHATSAPP_OS_OPENED, actorUserId);
 
     return this.getDetails(tenantId, saved.id);
   }
@@ -1189,7 +1204,23 @@ export class ServiceOrderService {
       eventType: 'service_order.workflow',
       metadata: { status: saved.status },
     });
+    if (status === ServiceOrderStatus.READY_FOR_PICKUP) {
+      await this.enqueueWhatsapp(tenantId, saved.id, WHATSAPP_READY, actorUserId);
+    }
     return saved;
+  }
+
+  private async enqueueWhatsapp(
+    tenantId: string,
+    serviceOrderId: string,
+    kind: typeof WHATSAPP_OS_OPENED | typeof WHATSAPP_READY,
+    actorUserId: string,
+  ) {
+    try {
+      await enqueueWhatsappNotice(this.dataSource, tenantId, serviceOrderId, kind, actorUserId);
+    } catch {
+      // A sacola e o status já foram gravados. O aviso entra de novo pelo reenvio.
+    }
   }
 
   private async releaseCounterHeldItems(serviceOrder: ServiceOrderEntity, actorUserId: string) {
@@ -1565,7 +1596,55 @@ export class ServiceOrderService {
     return paidById;
   }
 
+  private async floorFinishNames(
+    tenantId: string,
+    serviceOrderId: string,
+    groupId: string | null,
+  ): Promise<string[]> {
+    if (typeof this.dataSource?.query !== 'function') {
+      return [];
+    }
+    try {
+      const rows = (await this.dataSource.query(
+        `SELECT DISTINCT u.display_name AS name
+           FROM floor_diary_entries d
+           JOIN user_identities u ON u.id = d.user_id
+          WHERE d.tenant_id = $1
+            AND d.action IN ('finish_production', 'finish_rework')
+            AND d.service_order_id IN (
+              SELECT so.id
+                FROM service_orders so
+               WHERE so.tenant_id = $1
+                 AND so.is_deleted = false
+                 AND (
+                   so.id = $2
+                   OR so.group_id = $2
+                   OR so.id = $3
+                   OR ($3::uuid IS NOT NULL AND so.group_id = $3)
+                 )
+            )
+          ORDER BY u.display_name`,
+        [tenantId, serviceOrderId, groupId],
+      )) as Array<{ name?: string | null }>;
+      return [...new Set(rows.map((row) => (row.name ?? '').trim()).filter(Boolean))];
+    } catch {
+      return [];
+    }
+  }
+
+  private async actorDisplayName(userId: string): Promise<string | null> {
+    try {
+      const user = await this.identityService.getById(userId);
+      return user.displayName ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   private async assertPickupPaymentAllowed(tenantId: string, serviceOrder: ServiceOrderEntity) {
+    if (serviceOrder.deliveryReleasedAt) {
+      return;
+    }
     const tenant = await this.tenantService.getById(tenantId);
     if (!tenant.blockDeliveryWithOutstandingBalance) {
       return;
@@ -1747,11 +1826,50 @@ export class ServiceOrderService {
     };
   }
 
+  async releaseDelivery(tenantId: string, serviceOrderId: string, actorUserId: string, reason: string) {
+    const serviceOrder = await this.getById(serviceOrderId, tenantId);
+    if (serviceOrder.status !== ServiceOrderStatus.READY_FOR_PICKUP) {
+      throw new DomainValidationError('Só a OS pronta para retirada pode ser liberada.');
+    }
+    const note = reason.trim();
+    if (!note || note.length > 200) {
+      throw new DomainValidationError('Informe o motivo da liberação, com até 200 caracteres.');
+    }
+    const tenant = await this.tenantService.getById(tenantId);
+    if (!tenant.blockDeliveryWithOutstandingBalance) {
+      throw new DomainValidationError('A Conta não bloqueia entrega com saldo.');
+    }
+    const outstandingBalance = await this.readOutstandingBalance(serviceOrder);
+    if (outstandingBalance <= 0) {
+      throw new DomainValidationError('Não há saldo bloqueando a entrega.');
+    }
+    if (serviceOrder.deliveryReleasedAt) {
+      throw new DomainValidationError('A entrega desta OS já foi liberada.');
+    }
+    serviceOrder.deliveryReleasedAt = new Date();
+    serviceOrder.deliveryReleasedBy = actorUserId;
+    serviceOrder.deliveryReleaseReason = note;
+    serviceOrder.updatedBy = actorUserId;
+    await this.serviceOrderRepository.save(serviceOrder);
+    await this.auditService.record({
+      tenantId,
+      branchId: serviceOrder.branchId,
+      actorUserId,
+      entityType: 'service_order',
+      entityId: serviceOrder.id,
+      action: 'service_order.delivery.released',
+      eventType: 'service_order.write',
+      metadata: { reason: note, outstandingBalance },
+    });
+    return this.getDetails(tenantId, serviceOrderId);
+  }
+
   async createClientReturn(
     tenantId: string,
     originServiceOrderId: string,
     actorUserId: string,
     itemIds: string[],
+    options?: { waiveCharge?: boolean; reason?: string },
   ) {
     const origin = await this.getById(originServiceOrderId, tenantId);
     if (origin.status !== ServiceOrderStatus.PICKED_UP) {
@@ -1785,12 +1903,27 @@ export class ServiceOrderService {
     const preview = buildClientReturnPreview(
       origin.actualPickupDate,
       tenant.warrantyAdjustmentPeriodDays ?? 7,
-      tenant.warrantyExecutionPeriodDays ?? 7,
+      tenant.warrantyExecutionPeriodDays ?? 90,
     );
-    const charged = preview.kind === ServiceOrderReturnKind.CHARGED;
+    let charged = preview.kind === ServiceOrderReturnKind.CHARGED;
+    let chargeWaivedReason: string | null = null;
+    if (options?.waiveCharge) {
+      if (!charged) {
+        throw new DomainValidationError('Dentro do prazo a OS já nasce sem valor.');
+      }
+      const note = (options.reason ?? '').trim();
+      if (!note || note.length > 200) {
+        throw new DomainValidationError('Informe o motivo para abrir sem valor, com até 200 caracteres.');
+      }
+      charged = false;
+      chargeWaivedReason = note;
+    }
     const processLetter = processLetterForReturnKind(preview.kind);
     const returnLabel = osReturnKindLabel(preview.kind) ?? 'Retorno';
-    const returnNote = `Retorno da OS ${origin.orderNo} (${returnLabel}).`;
+    const returnNote = chargeWaivedReason
+      ? `Retorno da OS ${origin.orderNo} (${returnLabel}). Aberta sem valor: ${chargeWaivedReason}`
+      : `Retorno da OS ${origin.orderNo} (${returnLabel}).`;
+    const originFloorNames = (await this.floorFinishNames(tenantId, origin.id, origin.groupId)).join(', ');
 
     const saved = await this.persistLinkedProcessOrder({
       tenantId,
@@ -1803,6 +1936,8 @@ export class ServiceOrderService {
       charged,
       holdOriginItems: false,
       commercialNote: returnNote,
+      originFloorNames,
+      chargeWaivedReason,
     });
 
     await this.auditService.record({
@@ -1820,6 +1955,9 @@ export class ServiceOrderService {
         daysSincePickup: preview.daysSincePickup,
         itemCount: selectedItems.length,
         versionSuffix: saved.versionSuffix,
+        originFloorNames: originFloorNames || null,
+        chargeWaived: Boolean(chargeWaivedReason),
+        chargeWaivedReason,
       },
     });
 
@@ -1912,6 +2050,8 @@ export class ServiceOrderService {
     charged: boolean;
     holdOriginItems: boolean;
     commercialNote: string;
+    originFloorNames?: string | null;
+    chargeWaivedReason?: string | null;
   }) {
     const openedAt = new Date();
     const suggestedDelivery = await this.deliveryDateService.suggestDelivery(
@@ -1990,6 +2130,10 @@ export class ServiceOrderService {
         customerNotes: input.origin.customerNotes,
         publicToken: randomUUID(),
         status: ServiceOrderStatus.OPEN,
+        originFloorNames: input.originFloorNames ?? null,
+        chargeWaivedAt: input.chargeWaivedReason ? openedAt : null,
+        chargeWaivedBy: input.chargeWaivedReason ? input.actorUserId : null,
+        chargeWaivedReason: input.chargeWaivedReason ?? null,
         totalValue: orderTotals,
         discountValue: input.charged && input.origin.discountValue != null ? input.origin.discountValue : null,
         isDeleted: false,

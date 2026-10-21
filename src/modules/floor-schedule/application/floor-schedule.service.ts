@@ -9,6 +9,7 @@ import { floorActionLabel, nextFloorAction } from 'src/modules/service-orders/ap
 import { ServiceOrderService } from 'src/modules/service-orders/application/service-order/service-order.service';
 import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
 import {
+  dayBoardDates,
   eachIsoDate,
   FLOOR_PROFILE_ROLE_CODES,
   type FloorProfile,
@@ -28,6 +29,47 @@ type TechnicianRow = {
   dailyRate: number;
   piecesPerDay: number;
 };
+type GradeCollaborator = { technicianId: string; displayName: string };
+type GradePeriodDay = { workDate: string; collaborators: GradeCollaborator[] };
+export type GradePeriod = { id: string; from: string; to: string; days: GradePeriodDay[] };
+
+function brDate(iso: string) {
+  const [year, month, day] = iso.slice(0, 10).split('-');
+  return `${day}/${month}/${year}`;
+}
+
+function groupGradePeriods(
+  rows: Array<{
+    id: string;
+    from: string;
+    to: string;
+    workDate: string | null;
+    technicianId: string | null;
+    displayName: string | null;
+  }>,
+): GradePeriod[] {
+  const periods = new Map<string, GradePeriod>();
+  for (const row of rows) {
+    let period = periods.get(row.id);
+    if (!period) {
+      period = { id: row.id, from: row.from.slice(0, 10), to: row.to.slice(0, 10), days: [] };
+      periods.set(row.id, period);
+    }
+    if (!row.workDate || !row.technicianId || !row.displayName) {
+      continue;
+    }
+    const workDate = row.workDate.slice(0, 10);
+    let day = period.days.find((item) => item.workDate === workDate);
+    if (!day) {
+      day = { workDate, collaborators: [] };
+      period.days.push(day);
+    }
+    if (!day.collaborators.some((person) => person.technicianId === row.technicianId)) {
+      day.collaborators.push({ technicianId: row.technicianId, displayName: row.displayName });
+    }
+  }
+  return [...periods.values()];
+}
 type SessionRow = {
   id: string;
   branchId: string;
@@ -203,6 +245,32 @@ export class FloorScheduleService {
     return this.listTechnicians(tenantId);
   }
 
+  async dayBoard(tenantId: string, branchId: string, now = new Date()) {
+    const dates = dayBoardDates(saoPauloToday(now));
+    const rows = await this.dataSource.query(
+      `SELECT d.work_date::text AS "workDate", u.display_name AS "displayName"
+       FROM floor_schedule_days d
+       JOIN floor_technicians t ON t.id = d.technician_id AND t.status = 'active'
+       JOIN user_identities u ON u.id = t.user_id AND u.is_deleted = false AND u.status = 'active'
+       WHERE d.tenant_id = $1 AND d.branch_id = $2 AND d.work_date BETWEEN $3 AND $4
+       ORDER BY d.work_date ASC, u.display_name ASC`,
+      [tenantId, branchId, dates[0], dates[dates.length - 1]],
+    );
+    const namesByDay = new Map<string, string[]>(dates.map((date) => [date, []]));
+    for (const row of rows as Array<{ workDate: string; displayName: string }>) {
+      const names = namesByDay.get(row.workDate.slice(0, 10));
+      if (!names || names.includes(row.displayName)) {
+        continue;
+      }
+      names.push(row.displayName);
+    }
+    return {
+      from: dates[0],
+      to: dates[dates.length - 1],
+      days: dates.map((workDate) => ({ workDate, names: namesByDay.get(workDate) ?? [] })),
+    };
+  }
+
   async getSchedule(tenantId: string, branchId: string, from: string, to: string) {
     const error = schedulePeriodError(from, to);
     if (error) {
@@ -218,6 +286,40 @@ export class FloorScheduleService {
     return { from, to, days: rows as Array<{ technicianId: string; workDate: string }> };
   }
 
+  async listPeriods(tenantId: string, branchId: string) {
+    const rows = await this.dataSource.query(
+      `SELECT p.id, p.period_from::text AS "from", p.period_to::text AS "to",
+              d.work_date::text AS "workDate", t.id AS "technicianId", u.display_name AS "displayName"
+       FROM floor_schedule_periods p
+       LEFT JOIN floor_schedule_days d ON d.period_id = p.id AND d.tenant_id = p.tenant_id
+       LEFT JOIN floor_technicians t ON t.id = d.technician_id
+       LEFT JOIN user_identities u ON u.id = t.user_id
+       WHERE p.tenant_id = $1 AND p.branch_id = $2
+       ORDER BY p.period_from DESC, p.period_to DESC, d.work_date ASC, u.display_name ASC`,
+      [tenantId, branchId],
+    );
+    return groupGradePeriods(rows);
+  }
+
+  async getPeriod(tenantId: string, branchId: string, periodId: string) {
+    const rows = await this.dataSource.query(
+      `SELECT p.id, p.period_from::text AS "from", p.period_to::text AS "to",
+              d.work_date::text AS "workDate", t.id AS "technicianId", u.display_name AS "displayName"
+       FROM floor_schedule_periods p
+       LEFT JOIN floor_schedule_days d ON d.period_id = p.id AND d.tenant_id = p.tenant_id
+       LEFT JOIN floor_technicians t ON t.id = d.technician_id
+       LEFT JOIN user_identities u ON u.id = t.user_id
+       WHERE p.tenant_id = $1 AND p.branch_id = $2 AND p.id = $3
+       ORDER BY d.work_date ASC, u.display_name ASC`,
+      [tenantId, branchId, periodId],
+    );
+    const period = groupGradePeriods(rows)[0];
+    if (!period) {
+      throw new DomainValidationError('A grade não foi encontrada.');
+    }
+    return period;
+  }
+
   async saveSchedule(
     tenantId: string,
     branchId: string,
@@ -226,47 +328,160 @@ export class FloorScheduleService {
     marks: Array<{ technicianId: string; dates: string[] }>,
     actorUserId: string,
   ) {
-    const error = schedulePeriodError(from, to);
+    await this.savePeriod(tenantId, branchId, null, from, to, marks, actorUserId);
+    return this.getSchedule(tenantId, branchId, from, to);
+  }
+
+  async savePeriod(
+    tenantId: string,
+    branchId: string,
+    periodId: string | null,
+    from: string,
+    to: string,
+    marks: Array<{ technicianId: string; dates: string[] }>,
+    actorUserId: string,
+  ) {
+    const periodFrom = from.slice(0, 10);
+    const periodTo = to.slice(0, 10);
+    const error = schedulePeriodError(periodFrom, periodTo);
     if (error) {
       throw new DomainValidationError(error);
     }
-    const allowed = new Set(eachIsoDate(from, to));
+    const allowed = new Set(eachIsoDate(periodFrom, periodTo));
     const technicians = await this.listTechnicians(tenantId);
     const rows: Array<{ technicianId: string; workDate: string }> = [];
+    const seen = new Set<string>();
     for (const mark of marks) {
       const technician = technicians.find((item) => item.id === mark.technicianId);
       if (!technician || technician.status !== 'active' || technician.profile !== 'tecnico') {
         throw new DomainValidationError('Só técnico ativo entra na grade.');
       }
       for (const date of mark.dates) {
-        if (!allowed.has(date)) {
+        const workDate = date.slice(0, 10);
+        if (!allowed.has(workDate)) {
           throw new DomainValidationError('Há um dia fora do período escolhido.');
         }
-        rows.push({ technicianId: mark.technicianId, workDate: date });
+        const key = `${mark.technicianId}|${workDate}`;
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        rows.push({ technicianId: mark.technicianId, workDate });
       }
     }
-    await this.dataSource.query(
-      `DELETE FROM floor_schedule_days WHERE tenant_id = $1 AND branch_id = $2 AND work_date BETWEEN $3 AND $4`,
-      [tenantId, branchId, from, to],
-    );
-    for (const row of rows) {
-      await this.dataSource.query(
-        `INSERT INTO floor_schedule_days (id, tenant_id, branch_id, technician_id, work_date, created_by, updated_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $6)`,
-        [randomUUID(), tenantId, branchId, row.technicianId, row.workDate, actorUserId],
-      );
-    }
+    const savedId = await this.dataSource.transaction(async (manager) => {
+      let id = periodId;
+      if (id) {
+        const current = await manager.query(
+          `SELECT id FROM floor_schedule_periods WHERE id = $1 AND tenant_id = $2 AND branch_id = $3`,
+          [id, tenantId, branchId],
+        );
+        if (!current[0]) {
+          throw new DomainValidationError('A grade não foi encontrada.');
+        }
+        const clash = await manager.query(
+          `SELECT id FROM floor_schedule_periods
+           WHERE tenant_id = $1 AND branch_id = $2 AND period_from = $3 AND period_to = $4 AND id <> $5`,
+          [tenantId, branchId, periodFrom, periodTo, id],
+        );
+        if (clash[0]) {
+          throw new DomainValidationError('Já existe uma grade neste período.');
+        }
+        await manager.query(
+          `UPDATE floor_schedule_periods
+           SET period_from = $4, period_to = $5, updated_by = $6, updated_at = now(), row_version = row_version + 1
+           WHERE id = $1 AND tenant_id = $2 AND branch_id = $3`,
+          [id, tenantId, branchId, periodFrom, periodTo, actorUserId],
+        );
+      } else {
+        const existing = await manager.query(
+          `SELECT id FROM floor_schedule_periods
+           WHERE tenant_id = $1 AND branch_id = $2 AND period_from = $3 AND period_to = $4`,
+          [tenantId, branchId, periodFrom, periodTo],
+        );
+        if (existing[0]) {
+          id = existing[0].id as string;
+          await manager.query(
+            `UPDATE floor_schedule_periods
+             SET updated_by = $4, updated_at = now(), row_version = row_version + 1
+             WHERE id = $1 AND tenant_id = $2 AND branch_id = $3`,
+            [id, tenantId, branchId, actorUserId],
+          );
+        } else {
+          id = randomUUID();
+          await manager.query(
+            `INSERT INTO floor_schedule_periods
+               (id, tenant_id, branch_id, period_from, period_to, created_by, updated_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $6)`,
+            [id, tenantId, branchId, periodFrom, periodTo, actorUserId],
+          );
+        }
+      }
+      await manager.query(`DELETE FROM floor_schedule_days WHERE tenant_id = $1 AND period_id = $2`, [tenantId, id]);
+      for (const row of rows) {
+        const occupied = await manager.query(
+          `SELECT u.display_name AS "displayName"
+           FROM floor_schedule_days d
+           JOIN floor_technicians t ON t.id = d.technician_id
+           JOIN user_identities u ON u.id = t.user_id
+           WHERE d.tenant_id = $1 AND d.branch_id = $2 AND d.technician_id = $3 AND d.work_date = $4
+           LIMIT 1`,
+          [tenantId, branchId, row.technicianId, row.workDate],
+        );
+        if (occupied[0]) {
+          throw new DomainValidationError(
+            `${occupied[0].displayName as string} já está em outra grade no dia ${brDate(row.workDate)}.`,
+          );
+        }
+        await manager.query(
+          `INSERT INTO floor_schedule_days
+             (id, tenant_id, branch_id, technician_id, work_date, period_id, created_by, updated_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
+          [randomUUID(), tenantId, branchId, row.technicianId, row.workDate, id, actorUserId],
+        );
+      }
+      return id as string;
+    });
     await this.auditService.record({
       tenantId,
       branchId,
       actorUserId,
       entityType: 'floor_schedule',
-      entityId: branchId,
+      entityId: savedId,
       action: 'floor.schedule.saved',
       eventType: 'production.schedule',
-      metadata: { from, to, marks: rows.length },
+      metadata: { from: periodFrom, to: periodTo, marks: rows.length },
     });
-    return this.getSchedule(tenantId, branchId, from, to);
+    return this.getPeriod(tenantId, branchId, savedId);
+  }
+
+  async deletePeriod(tenantId: string, branchId: string, periodId: string, actorUserId: string) {
+    const found = await this.dataSource.query(
+      `SELECT id, period_from::text AS "from", period_to::text AS "to"
+       FROM floor_schedule_periods
+       WHERE id = $1 AND tenant_id = $2 AND branch_id = $3`,
+      [periodId, tenantId, branchId],
+    );
+    if (!found[0]) {
+      throw new DomainValidationError('A grade não foi encontrada.');
+    }
+    await this.dataSource.transaction(async (manager) => {
+      await manager.query(`DELETE FROM floor_schedule_days WHERE tenant_id = $1 AND period_id = $2`, [tenantId, periodId]);
+      await manager.query(
+        `DELETE FROM floor_schedule_periods WHERE id = $1 AND tenant_id = $2 AND branch_id = $3`,
+        [periodId, tenantId, branchId],
+      );
+    });
+    await this.auditService.record({
+      tenantId,
+      branchId,
+      actorUserId,
+      entityType: 'floor_schedule',
+      entityId: periodId,
+      action: 'floor.schedule.deleted',
+      eventType: 'production.schedule',
+      metadata: { from: found[0].from, to: found[0].to },
+    });
   }
 
   async ensureCheckinCodes(tenantId: string, branchId: string, actorUserId: string) {

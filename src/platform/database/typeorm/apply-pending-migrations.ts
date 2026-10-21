@@ -28,6 +28,10 @@ import { WorkGroups1760000048000 } from './migrations/1760000048000-work-groups'
 import { PaymentMachineWait1760000049000 } from './migrations/1760000049000-payment-machine-wait';
 import { FloorSchedule1760000050000 } from './migrations/1760000050000-floor-schedule';
 import { FloorCollaborators1760000051000 } from './migrations/1760000051000-floor-collaborators';
+import { FloorSchedulePeriods1760000052000 } from './migrations/1760000052000-floor-schedule-periods';
+import { Whatsapp1760000053000 } from './migrations/1760000053000-whatsapp';
+import { EmailSettings1760000054000 } from './migrations/1760000054000-email-settings';
+import { ServiceOrderRelease1760000055000 } from './migrations/1760000055000-service-order-release';
 
 export async function applyPendingMigrations(dataSource: DataSource): Promise<void> {
   if (typeof dataSource.runMigrations === 'function') {
@@ -47,6 +51,10 @@ export async function ensureAtelierOsSchema(dataSource: DataSource): Promise<voi
     try {
       await new FloorSchedule1760000050000().up(queryRunner);
       await new FloorCollaborators1760000051000().up(queryRunner);
+      await new FloorSchedulePeriods1760000052000().up(queryRunner);
+      await new Whatsapp1760000053000().up(queryRunner);
+      await new EmailSettings1760000054000().up(queryRunner);
+      await new ServiceOrderRelease1760000055000().up(queryRunner);
       await new PaymentMachineWait1760000049000().up(queryRunner);
       await new PaymentManualReason1760000046000().up(queryRunner);
       await new PaymentReversal1760000047000().up(queryRunner);

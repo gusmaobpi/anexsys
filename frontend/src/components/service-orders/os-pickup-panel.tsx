@@ -1,38 +1,47 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { formatPickupWindow, type PickupSummary } from "@/components/service-orders/os-pickup";
+import { type PickupSummary } from "@/components/service-orders/os-pickup";
 import { osShowsFaltaPagamento, type OsFinancialSummary } from "@/components/service-orders/os-payment";
 import { readOsPhotoFile } from "@/components/service-orders/os-photo";
+
+type DeliveryRelease = {
+  releasedAt?: string | Date | null;
+  reason?: string | null;
+  releasedByName?: string | null;
+};
 
 type Props = {
   orderNo: string;
   pickup: PickupSummary | null;
   payment?: OsFinancialSummary | null;
   saving?: boolean;
+  canRelease?: boolean;
+  deliveryRelease?: DeliveryRelease | null;
   onClose: () => void;
-  onCopyLink?: () => Promise<void> | void;
-  onStart: () => Promise<void> | void;
   onComplete: (input: {
-    method: "paper" | "attendant";
-    photo?: { mimeType: string; contentBase64: string; fileName: string } | null;
+    method: "paper";
+    photo: { mimeType: string; contentBase64: string; fileName: string };
   }) => Promise<void> | void;
+  onRelease?: (reason: string) => Promise<void> | void;
 };
 
 export function OsPickupPanel({
   orderNo,
-  pickup,
   payment = null,
   saving = false,
+  canRelease = false,
+  deliveryRelease = null,
   onClose,
-  onCopyLink,
-  onStart,
   onComplete,
+  onRelease,
 }: Props) {
   const [photo, setPhoto] = useState<{ mimeType: string; contentBase64: string; fileName: string } | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const windowLabel = formatPickupWindow(pickup?.windowExpiresAt ?? null);
+  const released = Boolean(deliveryRelease?.reason || deliveryRelease?.releasedAt);
+  const blocked = Boolean(payment?.deliveryBlocked) && !released;
 
   async function handleFile(file: File | undefined) {
     if (!file) {
@@ -63,32 +72,18 @@ export function OsPickupPanel({
     <form className="os-pay-panel" onSubmit={(event) => void handlePaper(event)}>
       <div className="workspace-toolbar__copy">
         <h4>Retirada · OS {orderNo}</h4>
-        <p>
-          Inicie a retirada para habilitar o <strong>Recebi</strong> no link do cliente. A API do WhatsApp entra
-          depois; o mesmo link já fica pronto. Sem clique do cliente, use o papel ou o Entregue do atendente.
-        </p>
+        <p>A retirada desta versão é no papel. Anexe a foto da OP assinada e confirme Entregue assinado.</p>
       </div>
       {osShowsFaltaPagamento(payment) ? (
-        <p className="os-rule-banner">
-          Falta pagamento. Isso não muda o status da OS
-          {payment?.deliveryBlocked ? " e a entrega fica bloqueada até quitar ou o gerente liberar (depois)." : "."}
+        <p className="os-rule-banner">Falta pagamento. Isso não muda o status da OS.</p>
+      ) : null}
+      {blocked ? <p className="table-subtle">O saldo em aberto bloqueia a entrega.</p> : null}
+      {released ? (
+        <p className="table-subtle">
+          Entrega liberada{deliveryRelease?.releasedByName ? ` por ${deliveryRelease.releasedByName}` : ""}. Motivo:{" "}
+          {deliveryRelease?.reason}
         </p>
       ) : null}
-      <p className="table-subtle">
-        {pickup?.windowOpen
-          ? `Janela aberta até ${windowLabel}. O Recebi no link já pode confirmar.`
-          : "A janela do cliente ainda não foi aberta."}
-      </p>
-      <div className="button-row">
-        <button className="button" disabled={saving} onClick={() => void onStart()} type="button">
-          {saving ? "Abrindo…" : pickup?.windowOpen ? "Renovar janela" : "Iniciar retirada"}
-        </button>
-        {onCopyLink ? (
-          <button className="button-secondary" disabled={saving} onClick={() => void onCopyLink()} type="button">
-            Copiar link do cliente
-          </button>
-        ) : null}
-      </div>
       <label className="field">
         <span>Foto da OP assinada</span>
         <input
@@ -101,19 +96,40 @@ export function OsPickupPanel({
         />
       </label>
       {preview ? <img alt="Foto da OP assinada" className="os-pickup-photo" src={preview} /> : null}
+      {canRelease && blocked && onRelease ? (
+        <label className="field">
+          <span>Motivo da liberação</span>
+          <textarea
+            disabled={saving}
+            maxLength={200}
+            onChange={(event) => setReason(event.target.value)}
+            rows={3}
+            value={reason}
+          />
+        </label>
+      ) : null}
       {error ? <p className="workspace-flash workspace-flash--error">{error}</p> : null}
       <div className="button-row">
-        <button className="button" disabled={saving || !photo || Boolean(payment?.deliveryBlocked)} type="submit">
+        <button className="button" disabled={saving || !photo || blocked} type="submit">
           {saving ? "Registrando…" : "Entregue assinado"}
         </button>
-        <button
-          className="button-secondary"
-          disabled={saving || Boolean(payment?.deliveryBlocked)}
-          onClick={() => void onComplete({ method: "attendant" })}
-          type="button"
-        >
-          Entregue
-        </button>
+        {canRelease && blocked && onRelease ? (
+          <button
+            className="button-secondary"
+            disabled={saving || reason.trim().length === 0}
+            onClick={() => {
+              const note = reason.trim();
+              if (!note) {
+                setError("Informe o motivo da liberação.");
+                return;
+              }
+              void onRelease(note);
+            }}
+            type="button"
+          >
+            Liberar entrega
+          </button>
+        ) : null}
         <button className="button-secondary" disabled={saving} onClick={onClose} type="button">
           Cancelar
         </button>

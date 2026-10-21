@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsEnum, IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsEnum, IsOptional, IsString, IsUUID, Length } from 'class-validator';
 import { CustomerType } from 'src/shared/domain/enums';
 
 export class CreateCustomerRequestDto {
@@ -59,6 +59,10 @@ export class CreateCustomerRequestDto {
   @IsOptional()
   @IsString()
   tradeName?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  whatsappConsent?: boolean;
 }
 
 export class CreateCustomerDto extends CreateCustomerRequestDto {

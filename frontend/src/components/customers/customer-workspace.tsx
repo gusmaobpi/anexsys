@@ -39,6 +39,7 @@ type CustomerRecord = {
   country?: string | null;
   observations: string | null;
   status: CustomerStatus;
+  whatsappConsent?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -149,6 +150,7 @@ type CustomerFormState = {
   country: string;
   observations: string;
   status: CustomerStatus;
+  whatsappConsent: boolean;
 };
 
 type MeasurementDraft = {
@@ -176,6 +178,7 @@ const defaultCustomerForm = (): CustomerFormState => ({
   country: "Brasil",
   observations: "",
   status: "active",
+  whatsappConsent: false,
 });
 
 const EMPTY_CUSTOMER_LIST_QUERY = { q: "", status: "", customerType: "" };
@@ -232,6 +235,7 @@ function mapCustomerToForm(customer: CustomerRecord): CustomerFormState {
     country: customer.country ?? "Brasil",
     observations: customer.observations ?? "",
     status: customer.status,
+    whatsappConsent: customer.whatsappConsent === true,
   };
 }
 
@@ -273,6 +277,7 @@ export function CustomerWorkspace() {
   const [catalog, setCatalog] = useState<MeasurementCatalogResponse | null>(null);
   const [showCreateForm, setShowCreateForm] = useWorkspaceScopedState("customers.showCreateForm", false);
   const [savingCustomer, setSavingCustomer] = useState(false);
+  const [consentText, setConsentText] = useState("");
   const [savingMeasurements, setSavingMeasurements] = useState(false);
   const [lookingUpPostalCode, setLookingUpPostalCode] = useState(false);
   const [workspaceMessage, setWorkspaceMessage] = useState<string | null>(null);
@@ -417,6 +422,15 @@ export function CustomerWorkspace() {
     }, 250);
     return () => window.clearTimeout(timeoutId);
   }, [loadCustomers]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void apiJson<{ consentText: string }>("/whatsapp/consent-text")
+        .then((response) => setConsentText(response.consentText))
+        .catch(() => setConsentText(""));
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [apiJson]);
 
   useEffect(() => {
     if (!focusCustomerId || focusCustomerId === activeCustomerId || showCreateForm) {
@@ -759,6 +773,7 @@ export function CustomerWorkspace() {
           state: customerForm.state,
           country: customerForm.country,
           observations: customerForm.observations || undefined,
+          whatsappConsent: customerForm.whatsappConsent,
         }),
       });
       await loadCustomers();
@@ -811,6 +826,7 @@ export function CustomerWorkspace() {
           country: customerForm.country || null,
           observations: customerForm.observations || null,
           status: nextStatus,
+          whatsappConsent: customerForm.whatsappConsent,
         }),
       });
       await loadCustomers();
@@ -963,6 +979,7 @@ export function CustomerWorkspace() {
                   onDocumentChange={() => clearCustomerDuplicate()}
                   onPostalCodeLookup={() => void handlePostalCodeLookup()}
                   showStatus={false}
+                  consentText={consentText}
                 />
                 <div className="button-row">
                   <button className="button" disabled={savingCustomer || customerDuplicateStatus !== "idle"} type="submit">
@@ -1081,6 +1098,7 @@ export function CustomerWorkspace() {
                         onDocumentChange={() => clearCustomerDuplicate()}
                         onPostalCodeLookup={() => void handlePostalCodeLookup()}
                         showStatus
+                        consentText={consentText}
                       />
                       <div className="button-row">
                         <button className="button" disabled={savingCustomer || customerDuplicateStatus !== "idle"} type="submit">
@@ -1349,6 +1367,7 @@ function CustomerFields({
   onPostalCodeLookup,
   lookingUpPostalCode,
   showStatus,
+  consentText,
 }: {
   duplicateGuard?: ReactNode;
   form: CustomerFormState;
@@ -1358,6 +1377,7 @@ function CustomerFields({
   onPostalCodeLookup: () => void;
   lookingUpPostalCode: boolean;
   showStatus: boolean;
+  consentText: string;
 }) {
   return (
     <>
@@ -1410,6 +1430,15 @@ function CustomerFields({
           />
         </label>
       </div>
+      <label className="field">
+        <span>Autoriza aviso por WhatsApp</span>
+        <input
+          checked={form.whatsappConsent}
+          type="checkbox"
+          onChange={(event) => onChange((current) => ({ ...current, whatsappConsent: event.target.checked }))}
+        />
+        {consentText ? <small className="table-subtle">{consentText}</small> : null}
+      </label>
       {duplicateGuard}
 
       <div className="filters-grid">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/providers/session-provider";
 import { consumeFloorReturn } from "@/components/production/floor-return";
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const { login, status, errorMessage, clearError } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const hasUserEditedEmailRef = useRef(false);
@@ -104,23 +106,33 @@ export default function LoginPage() {
 
             <div className="field">
               <label htmlFor="password">Password</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Minimum 8 characters"
-                minLength={8}
-                required
-              />
+              <div className="password-field">
+                <input
+                  id="password"
+                  name="password"
+                  type={passwordVisible ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Minimum 8 characters"
+                  minLength={8}
+                  required
+                />
+                <button
+                  className="button-ghost password-field__toggle"
+                  onClick={() => setPasswordVisible((current) => !current)}
+                  type="button"
+                >
+                  {passwordVisible ? "Hide" : "Show"}
+                </button>
+              </div>
             </div>
 
             <div className="button-row">
               <button className="button" disabled={submitting} type="submit">
                 {submitting ? "Signing in…" : "Sign in"}
               </button>
+              <Link href="/forgot-password">Esqueci a senha</Link>
             </div>
           </form>
         </div>

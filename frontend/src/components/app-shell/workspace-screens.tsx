@@ -23,6 +23,9 @@ import { QualityWorkspace } from "@/components/quality/quality-workspace";
 import { ServiceOrdersWorkspace } from "@/components/service-orders/service-orders-workspace";
 import { PaymentProvidersWorkspace } from "@/components/settings/payment-providers-workspace";
 import { PaymentTerminalsWorkspace } from "@/components/settings/payment-terminals-workspace";
+import { WhatsappNoticesWorkspace } from "@/components/settings/whatsapp-notices-workspace";
+import { EmailSettingsWorkspace } from "@/components/settings/email-settings-workspace";
+import { WhatsappSettingsWorkspace } from "@/components/settings/whatsapp-settings-workspace";
 
 function AccessWorkspaceScreen() {
   return <AccessWorkspace />;
@@ -76,6 +79,9 @@ const workspaceScreens: Record<string, ComponentType> = {
   "/minute-rates": MinuteRatesWorkspaceScreen,
   "/settings/payments": PaymentProvidersWorkspaceScreen,
   "/settings/payments/terminals": PaymentTerminalsWorkspaceScreen,
+  "/settings/whatsapp": WhatsappSettingsWorkspace,
+  "/settings/email": EmailSettingsWorkspace,
+  "/whatsapp-notices": WhatsappNoticesWorkspace,
   "/service-orders": ServiceOrdersWorkspace,
   "/pick-bag": PickBagWorkspace,
   "/floor-collaborators": FloorCollaboratorsWorkspace,

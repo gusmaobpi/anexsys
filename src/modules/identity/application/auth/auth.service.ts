@@ -15,6 +15,7 @@ import { UserStatus, SessionStatus } from 'src/shared/domain/enums';
 import { FirstAccessTokenEntity } from '../../infrastructure/persistence/entities/first-access-token.entity';
 import { UserSessionEntity } from '../../infrastructure/persistence/entities/user-session.entity';
 import { FirstAccessTokenRepository } from '../../infrastructure/persistence/repositories/first-access-token.repository';
+import { EmailSettingsService } from 'src/modules/email/application/email-settings.service';
 import { UserCredentialRepository } from '../../infrastructure/persistence/repositories/user-credential.repository';
 import { UserSessionRepository } from '../../infrastructure/persistence/repositories/user-session.repository';
 import { TenantContext } from 'src/platform/tenancy/tenant-context';
@@ -62,7 +63,11 @@ export class AuthService {
     private readonly branchService: BranchService,
     @Inject(FirstAccessTokenRepository)
     private readonly firstAccessTokenRepository: FirstAccessTokenRepository,
+    @Inject(EmailSettingsService)
+    private readonly emailSettingsService: EmailSettingsService,
   ) {}
+
+  private readonly resetHits = new Map<string, number[]>();
 
   async loginWithPassword(dto: LoginPasswordDto): Promise<{
     accessToken: string;
@@ -269,6 +274,54 @@ export class AuthService {
     });
 
     return { token: rawToken, expiresAt: expiresAt.toISOString() };
+  }
+
+  async requestPasswordReset(email: string): Promise<{ message: string }> {
+    const message = this.emailSettingsService.passwordResetMessage();
+    const normalized = email.trim().toLowerCase();
+    if (!normalized || !this.allowReset(normalized)) {
+      return { message };
+    }
+    const users = await this.identityService.listByEmail(normalized);
+    for (const user of users) {
+      if (user.isDeleted || user.status === UserStatus.INACTIVE) {
+        continue;
+      }
+      if (!(await this.emailSettingsService.canEmailLinks(user.tenantId))) {
+        continue;
+      }
+      try {
+        const issued = await this.issueFirstAccessToken({
+          tenantId: user.tenantId,
+          userId: user.id,
+          actorUserId: user.id,
+          email: user.email,
+          deliveryChannel: 'email',
+        });
+        await this.emailSettingsService.trySendAccessLink({
+          tenantId: user.tenantId,
+          to: user.email,
+          displayName: user.displayName,
+          token: issued.token,
+          purpose: 'reset',
+        });
+      } catch {
+        // A resposta não muda se o envio falhar.
+      }
+    }
+    return { message };
+  }
+
+  private allowReset(email: string): boolean {
+    const now = Date.now();
+    const recent = (this.resetHits.get(email) ?? []).filter((at) => now - at < 15 * 60 * 1000);
+    if (recent.length >= 5) {
+      this.resetHits.set(email, recent);
+      return false;
+    }
+    recent.push(now);
+    this.resetHits.set(email, recent);
+    return true;
   }
 
   async validateFirstAccessToken(params: { email: string; token: string }) {

@@ -103,6 +103,17 @@ function createAuthService(overrides: Record<string, unknown> = {}) {
     deps.tenantService as never,
     deps.branchService as never,
     deps.firstAccessTokenRepository as never,
+    {
+      passwordResetMessage() {
+        return 'Se o e-mail estiver cadastrado, enviaremos o link para definir a senha.';
+      },
+      async canEmailLinks() {
+        return false;
+      },
+      async trySendAccessLink() {
+        return { emailed: false, reason: null };
+      },
+    } as never,
   );
 }
 

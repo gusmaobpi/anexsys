@@ -14,6 +14,8 @@ import {
 } from '@nestjs/common';
 import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, IsUUID, MinLength, ValidateIf } from 'class-validator';
 import { AuthorizationService } from 'src/modules/authorization/application/authorization/authorization.service';
+import { EmailSettingsService } from 'src/modules/email/application/email-settings.service';
+import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
 import { BranchScopeType, UserStatus } from 'src/shared/domain/enums';
 import { CurrentRequest, CurrentTenantId, CurrentUserId } from 'src/platform/http/request-context.decorators';
 import { Permissions } from 'src/platform/auth/permissions.decorator';
@@ -98,6 +100,8 @@ export class UsersController {
     private readonly authorizationService: AuthorizationService,
     @Inject(AuthService)
     private readonly authService: AuthService,
+    @Inject(EmailSettingsService)
+    private readonly emailSettingsService: EmailSettingsService,
   ) {}
 
   @Permissions('users.read')
@@ -146,15 +150,8 @@ export class UsersController {
     }
 
     const user = await this.identityService.inviteUser({ ...body, tenantId, actorUserId });
-    const firstAccess = await this.authService.issueFirstAccessToken({
-      tenantId,
-      userId: user.id,
-      actorUserId,
-      email: user.email,
-      deliveryChannel: 'email',
-    });
-
-    return { user, firstAccess };
+    const delivery = await this.issueAccessLink(tenantId, actorUserId, user);
+    return { user, ...delivery };
   }
 
   @Permissions('users.read')
@@ -328,5 +325,57 @@ export class UsersController {
     });
 
     return { success: true };
+  }
+
+  @Permissions('users.write')
+  @Post(':userId/access-link')
+  async sendAccessLink(
+    @Param('userId', new ParseUUIDPipe()) userId: string,
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+  ) {
+    const actorUserId = request.requestContext.authenticatedPrincipal?.userId;
+    if (!tenantId) {
+      throw new BadRequestException('Tenant context is required.');
+    }
+    if (!actorUserId) {
+      throw new UnauthorizedException('Authenticated user is required.');
+    }
+    const user = await this.identityService.getById(userId);
+    if (user.tenantId !== tenantId) {
+      throw new ForbiddenException('Requested user is outside the authenticated tenant scope.');
+    }
+    if (user.isDeleted) {
+      throw new DomainValidationError('O usuário não está mais na lista.');
+    }
+    if (user.status === UserStatus.INACTIVE) {
+      throw new DomainValidationError('Usuário inativo não recebe link. Ative o cadastro antes.');
+    }
+    return this.issueAccessLink(tenantId, actorUserId, user);
+  }
+
+  private async issueAccessLink(
+    tenantId: string,
+    actorUserId: string,
+    user: { id: string; email: string; displayName: string },
+  ) {
+    const firstAccess = await this.authService.issueFirstAccessToken({
+      tenantId,
+      userId: user.id,
+      actorUserId,
+      email: user.email,
+      deliveryChannel: 'email',
+    });
+    const delivery = await this.emailSettingsService.trySendAccessLink({
+      tenantId,
+      to: user.email,
+      displayName: user.displayName,
+      token: firstAccess.token,
+      purpose: 'invite',
+    });
+    if (delivery.emailed) {
+      return { emailed: true as const };
+    }
+    return { emailed: false as const, firstAccess, reason: delivery.reason };
   }
 }

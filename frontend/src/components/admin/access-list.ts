@@ -18,6 +18,7 @@ export type AccessUserListRecord = {
   defaultBranchId: string | null;
   status: "active" | "invited" | "inactive";
   defaultBranchLabel?: string;
+  isMaster?: boolean;
 };
 
 export function userStatusLabel(status: AccessUserListRecord["status"]) {

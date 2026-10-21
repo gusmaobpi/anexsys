@@ -57,6 +57,8 @@ export const ATELIER_ROLES = [
       'service_orders.read',
       'service_orders.write',
       'branches.read',
+      'whatsapp.read',
+      'whatsapp.resend',
     ],
   },
   {
@@ -107,6 +109,11 @@ export const ATELIER_ROLES = [
       'floor_schedule.write',
       'finance.read',
       'finance.write',
+      'whatsapp.read',
+      'whatsapp.write',
+      'whatsapp.resend',
+      'email.write',
+      'service_orders.release',
     ],
   },
 ] as const;

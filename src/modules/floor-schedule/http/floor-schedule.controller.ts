@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, ParseUUIDPipe, Patch, Post, Put, Query, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, ParseUUIDPipe, Patch, Post, Put, Query, UnauthorizedException } from '@nestjs/common';
 import { IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min, ValidateNested } from 'class-validator';
 import { FLOOR_PROFILES, type FloorProfile } from '../application/floor-schedule.rules';
 import { Type } from 'class-transformer';
@@ -62,6 +62,12 @@ class SaveScheduleBody {
   @ValidateNested({ each: true })
   @Type(() => ScheduleMarkBody)
   marks!: ScheduleMarkBody[];
+}
+
+class SavePeriodBody extends SaveScheduleBody {
+  @IsOptional()
+  @IsUUID()
+  id?: string;
 }
 
 class CodeBody {
@@ -159,6 +165,16 @@ export class FloorScheduleController {
     return this.floorScheduleService.setTechnicianStatus(this.tenant(tenantId), technicianId, body.status, this.actor(request));
   }
 
+  @Get('day-board')
+  async dayBoard(
+    @Query('branchId', new ParseUUIDPipe()) branchId: string,
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+  ) {
+    this.assertBranch(request, branchId);
+    return this.floorScheduleService.dayBoard(this.tenant(tenantId), branchId);
+  }
+
   @Permissions('floor_schedule.write')
   @Get('days')
   async days(
@@ -188,6 +204,61 @@ export class FloorScheduleController {
       body.marks,
       this.actor(request),
     );
+  }
+
+  @Permissions('floor_schedule.write')
+  @Get('periods')
+  async periods(
+    @Query('branchId', new ParseUUIDPipe()) branchId: string,
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+  ) {
+    this.assertBranch(request, branchId);
+    return this.floorScheduleService.listPeriods(this.tenant(tenantId), branchId);
+  }
+
+  @Permissions('floor_schedule.write')
+  @Get('periods/:periodId')
+  async period(
+    @Param('periodId', new ParseUUIDPipe()) periodId: string,
+    @Query('branchId', new ParseUUIDPipe()) branchId: string,
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+  ) {
+    this.assertBranch(request, branchId);
+    return this.floorScheduleService.getPeriod(this.tenant(tenantId), branchId, periodId);
+  }
+
+  @Permissions('floor_schedule.write')
+  @Put('periods')
+  async savePeriod(
+    @Body() body: SavePeriodBody,
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+  ) {
+    this.assertBranch(request, body.branchId);
+    return this.floorScheduleService.savePeriod(
+      this.tenant(tenantId),
+      body.branchId,
+      body.id ?? null,
+      body.from,
+      body.to,
+      body.marks,
+      this.actor(request),
+    );
+  }
+
+  @Permissions('floor_schedule.write')
+  @Delete('periods/:periodId')
+  async deletePeriod(
+    @Param('periodId', new ParseUUIDPipe()) periodId: string,
+    @Query('branchId', new ParseUUIDPipe()) branchId: string,
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+  ) {
+    this.assertBranch(request, branchId);
+    await this.floorScheduleService.deletePeriod(this.tenant(tenantId), branchId, periodId, this.actor(request));
+    return { id: periodId };
   }
 
   @Permissions('floor_schedule.write')

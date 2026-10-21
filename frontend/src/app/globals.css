@@ -83,6 +83,21 @@ textarea {
   padding: 28px;
 }
 
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  padding-right: 4.75rem;
+}
+
+.password-field__toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  transform: translateY(-50%);
+}
+
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -1302,6 +1317,71 @@ textarea {
 .topbar-chip--active {
   border-color: var(--primary);
   background: #eef4ff;
+}
+
+.day-board-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 84px 24px 24px;
+}
+
+.day-board-lightbox__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(15, 23, 32, 0.55);
+  cursor: pointer;
+}
+
+.day-board-card {
+  position: relative;
+  z-index: 1;
+  width: min(1080px, 100%);
+  max-height: calc(100vh - 108px);
+  overflow: auto;
+  padding: 20px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(15, 23, 32, 0.28);
+}
+
+.day-board-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.day-board-card__head h2 {
+  margin: 0 0 4px;
+}
+
+.day-board-card__head p {
+  margin: 0;
+}
+
+.day-board-table {
+  text-align: center;
+}
+
+.day-board-table th,
+.day-board-table td {
+  min-width: 120px;
+  vertical-align: top;
+}
+
+.day-board-month {
+  font-size: 15px;
+}
+
+.day-board-weekday {
+  font-weight: 600;
+  text-transform: none;
 }
 
 .topbar__actions {

@@ -31,6 +31,11 @@ class SelectBranchBody {
   branchId!: string;
 }
 
+class ForgotPasswordBody {
+  @IsEmail()
+  email!: string;
+}
+
 class FirstAccessValidateBody {
   @IsEmail()
   email!: string;
@@ -78,6 +83,12 @@ export class AuthController {
   @Post('token/refresh')
   async refreshToken(@Body() body: RefreshTokenBody) {
     return this.authService.refreshTokens(body);
+  }
+
+  @Public()
+  @Post('password/forgot')
+  async forgotPassword(@Body() body: ForgotPasswordBody) {
+    return this.authService.requestPasswordReset(body.email);
   }
 
   @Public()

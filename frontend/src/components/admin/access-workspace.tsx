@@ -45,6 +45,7 @@ type UserRecord = {
   displayName: string;
   defaultBranchId: string | null;
   status: "active" | "invited" | "inactive";
+  isMaster?: boolean;
 };
 
 type RoleRecord = {
@@ -569,7 +570,7 @@ export function AccessWorkspace() {
 
   const handleInactivateUser = useCallback(
     async (user: AccessUserListRecord) => {
-      if (user.status === "inactive") {
+      if (user.status === "inactive" || user.isMaster) {
         return;
       }
       if (!window.confirm(`Inativar ${user.displayName}? O usuário deixa de entrar no sistema.`)) {
@@ -593,10 +594,40 @@ export function AccessWorkspace() {
     [apiJson],
   );
 
+  const handleSendAccessLink = useCallback(
+    async (user: UserRecord) => {
+      setSaving(true);
+      setMessage(null);
+      try {
+        const result = await apiJson<{ emailed: boolean; reason?: string | null; firstAccess?: { token: string } }>(
+          `/users/${user.id}/access-link`,
+          { method: "POST" },
+        );
+        if (result.emailed) {
+          setMessage(`Link enviado para ${user.email}.`);
+          return;
+        }
+        const link = result.firstAccess
+          ? `${window.location.origin}/redefinir-senha?email=${encodeURIComponent(user.email)}&token=${encodeURIComponent(result.firstAccess.token)}`
+          : "";
+        setMessage(link ? `${result.reason ?? "A caixa de e-mail ainda não enviou."} ${link}` : result.reason ?? "O link não foi enviado.");
+      } catch (error) {
+        setMessage(describeWorkspaceError(error, "O link não foi enviado."));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [apiJson],
+  );
+
   const handleDeleteUser = useCallback(
     async (user: AccessUserListRecord, options: { skipConfirm?: boolean } = {}) => {
       if (user.id === currentUserId) {
         setMessage("Você não pode excluir o próprio usuário.");
+        return false;
+      }
+      if (user.isMaster) {
+        setMessage("O master não pode ser excluído.");
         return false;
       }
       if (
@@ -1218,8 +1249,12 @@ export function AccessWorkspace() {
                   </div>
                 </div>
 
+                {activeUser.isMaster ? (
+                  <p className="table-subtle">Este usuário é o master. Nome, e-mail, filial, papel e exclusão ficam travados. A senha muda pelo Esqueci a senha na tela de login.</p>
+                ) : null}
                 <form className="form-grid" onSubmit={handleUpdateUser}>
                   <UserFormFields
+                    locked={Boolean(activeUser.isMaster)}
                     duplicateGuard={
                       <MasterDataDuplicateGuard
                         entityLabel="usuário"
@@ -1252,25 +1287,39 @@ export function AccessWorkspace() {
                     setMessage={setMessage}
                   />
                   <div className="button-row">
-                    <button className="button" disabled={saving || !canWriteUsers || userDuplicateStatus !== "idle"} type="submit">
-                      {saving ? "Gravando…" : "Gravar"}
-                    </button>
-                    <button
-                      className="button-secondary"
-                      disabled={saving || !canWriteUsers || userDuplicateStatus !== "idle"}
-                      onClick={(event) => {
-                        requestCadastroContinue(event, handleUpdateUser);
-                      }}
-                      type="button"
-                    >
-                      {saving ? "Gravando…" : "Gravar e Continuar"}
-                    </button>
+                    {activeUser.isMaster ? null : (
+                      <>
+                        <button className="button" disabled={saving || !canWriteUsers || userDuplicateStatus !== "idle"} type="submit">
+                          {saving ? "Gravando…" : "Gravar"}
+                        </button>
+                        <button
+                          className="button-secondary"
+                          disabled={saving || !canWriteUsers || userDuplicateStatus !== "idle"}
+                          onClick={(event) => {
+                            requestCadastroContinue(event, handleUpdateUser);
+                          }}
+                          type="button"
+                        >
+                          {saving ? "Gravando…" : "Gravar e Continuar"}
+                        </button>
+                      </>
+                    )}
                     <button className="button-secondary" onClick={closeFormWorkspace} type="button">
                       Cancelar
                     </button>
                   </div>
                 </form>
 
+                <div className="mini-section">
+                  <h4>Link de senha</h4>
+                  <p className="table-subtle">Com a caixa de e-mail configurada, o link vai para o e-mail deste usuário. Sem a caixa, o link aparece aqui.</p>
+                  <button className="button-secondary" disabled={saving || !canWriteUsers} onClick={() => void handleSendAccessLink(activeUser)} type="button">
+                    {saving ? "Enviando…" : "Enviar link de senha"}
+                  </button>
+                </div>
+
+                {activeUser.isMaster ? null : (
+                <>
                 <div className="mini-section">
                   <h4>Vincular papel</h4>
                   <form className="inline-form" onSubmit={handleAssignRole}>
@@ -1344,6 +1393,8 @@ export function AccessWorkspace() {
                     </button>
                   </form>
                 </div>
+                </>
+                )}
 
                 <div className="mini-section">
                   <h4>Resumo de acesso</h4>
@@ -1371,7 +1422,7 @@ export function AccessWorkspace() {
           applyFilters={applyAccessUserListFilters}
           buildEmailCsv={buildAccessUserEmailCsv}
           buildExcelCsv={buildAccessUserExcelCsv}
-          canInactivate={(row) => row.status !== "inactive"}
+          canInactivate={(row) => row.status !== "inactive" && !row.isMaster}
           canWrite={canWriteUsers}
           columnStorageKey="anexsys.frontend.access-users.grid-columns.v1"
           columns={[
@@ -1474,15 +1525,18 @@ export function AccessWorkspace() {
               </form>
             ) : activeRole ? (
               <div className="detail-stack">
+                {activeRole.code === "MASTER_ADMINISTRATOR" ? (
+                  <p className="table-subtle">O papel master não pode ser alterado.</p>
+                ) : null}
                 <form className="form-grid" onSubmit={handleUpdateRole}>
                   <RoleFormFields form={roleForm} setForm={setRoleForm} />
                   <div className="button-row">
-                    <button className="button" disabled={saving || !canWriteRoles} type="submit">
+                    <button className="button" disabled={saving || !canWriteRoles || activeRole.code === "MASTER_ADMINISTRATOR"} type="submit">
                       {saving ? "Gravando…" : "Gravar"}
                     </button>
                     <button
                       className="button-secondary"
-                      disabled={saving || !canWriteRoles}
+                      disabled={saving || !canWriteRoles || activeRole.code === "MASTER_ADMINISTRATOR"}
                       onClick={(event) => {
                         requestCadastroContinue(event, handleUpdateRole);
                       }}
@@ -1506,7 +1560,7 @@ export function AccessWorkspace() {
                         </option>
                       ))}
                     </select>
-                    <button className="button-secondary" disabled={saving || !canWriteRoles} type="submit">
+                    <button className="button-secondary" disabled={saving || !canWriteRoles || activeRole.code === "MASTER_ADMINISTRATOR"} type="submit">
                       Vincular
                     </button>
                   </form>
@@ -1807,6 +1861,7 @@ function UserFormFields({
   setMessage,
   saving,
   requirePassword = false,
+  locked = false,
 }: {
   branches: BranchRecord[];
   canQuickCreateBranch: boolean;
@@ -1819,6 +1874,7 @@ function UserFormFields({
   setMessage: Dispatch<SetStateAction<string | null>>;
   saving: boolean;
   requirePassword?: boolean;
+  locked?: boolean;
 }) {
   const { apiJson } = useSession();
   const branchLookupOptions = useMemo<SmartLookupOption[]>(
@@ -1836,6 +1892,7 @@ function UserFormFields({
       <label className="field">
         <span>E-mail</span>
         <input
+          disabled={locked}
           required
           value={form.email}
           onBlur={onEmailBlur}
@@ -1848,7 +1905,7 @@ function UserFormFields({
       {duplicateGuard}
       <label className="field">
         <span>Nome exibido</span>
-        <input required value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} />
+        <input disabled={locked} required value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} />
       </label>
       {requirePassword ? (
         <label className="field">
@@ -1864,7 +1921,7 @@ function UserFormFields({
       ) : null}
       <label className="field">
         <span>Status</span>
-        <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as UserForm["status"] }))}>
+        <select disabled={locked} value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as UserForm["status"] }))}>
           <option value="active">Ativo</option>
           <option value="invited">Convidado</option>
           <option value="inactive">Inativo</option>
@@ -1875,7 +1932,7 @@ function UserFormFields({
           allowClear
           canCreate={canQuickCreateBranch}
           createLabel="Cadastrar"
-          disabled={saving}
+          disabled={saving || locked}
           entityType="branches"
           label="Filial padrão"
           options={branchLookupOptions}

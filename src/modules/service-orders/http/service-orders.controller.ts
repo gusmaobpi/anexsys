@@ -17,6 +17,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsIn,
@@ -265,11 +266,21 @@ class UpdateServiceOrderBody {
   customerNotes?: string;
 }
 
+class DeliveryReleaseBody {
+  @IsString()
+  @MinLength(1)
+  reason!: string;
+}
+
 class ClientReturnBody {
   @IsArray()
   @ArrayMinSize(1)
   @IsUUID('4', { each: true })
   itemIds!: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  waiveCharge?: boolean;
 
   @IsOptional()
   @IsString()
@@ -724,6 +735,23 @@ export class ServiceOrdersController {
     return this.serviceOrderService.markPickedUp(tenantId, serviceOrderId, principal.userId);
   }
 
+  @Permissions('service_orders.release')
+  @Post(':serviceOrderId/delivery-release')
+  async releaseDelivery(
+    @Param('serviceOrderId', new ParseUUIDPipe()) serviceOrderId: string,
+    @Body() body: DeliveryReleaseBody,
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+  ) {
+    const principal = request.requestContext.authenticatedPrincipal;
+    if (!tenantId || !principal) {
+      throw new UnauthorizedException('Authenticated tenant context is required.');
+    }
+    const serviceOrder = await this.serviceOrderService.getById(serviceOrderId, tenantId);
+    this.serviceOrderService.assertBranchAccess(serviceOrder, principal.effectiveBranchIds);
+    return this.serviceOrderService.releaseDelivery(tenantId, serviceOrderId, principal.userId, body.reason);
+  }
+
   @Permissions('service_orders.write')
   @Post(':serviceOrderId/client-return')
   async createClientReturn(
@@ -738,7 +766,13 @@ export class ServiceOrdersController {
     }
     const serviceOrder = await this.serviceOrderService.getById(serviceOrderId, tenantId);
     this.serviceOrderService.assertBranchAccess(serviceOrder, principal.effectiveBranchIds);
-    return this.serviceOrderService.createClientReturn(tenantId, serviceOrderId, principal.userId, body.itemIds);
+    if (body.waiveCharge === true && !principal.effectivePermissions.includes('service_orders.release')) {
+      throw new ForbiddenException('Só o gerente libera a OS sem valor fora do prazo.');
+    }
+    return this.serviceOrderService.createClientReturn(tenantId, serviceOrderId, principal.userId, body.itemIds, {
+      waiveCharge: body.waiveCharge === true,
+      reason: body.reason,
+    });
   }
 
   @Permissions('service_orders.write')

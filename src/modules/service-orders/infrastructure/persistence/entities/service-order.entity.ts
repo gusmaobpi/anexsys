@@ -102,4 +102,25 @@ export class ServiceOrderEntity extends SoftDeletableBusinessEntity {
 
   @Column({ name: 'floor_holder_user_id', type: 'uuid', nullable: true })
   floorHolderUserId!: string | null;
+
+  @Column({ name: 'origin_floor_names', type: 'text', nullable: true })
+  originFloorNames!: string | null;
+
+  @Column({ name: 'delivery_released_at', type: 'timestamptz', nullable: true })
+  deliveryReleasedAt!: Date | null;
+
+  @Column({ name: 'delivery_released_by', type: 'uuid', nullable: true })
+  deliveryReleasedBy!: string | null;
+
+  @Column({ name: 'delivery_release_reason', type: 'varchar', length: 200, nullable: true })
+  deliveryReleaseReason!: string | null;
+
+  @Column({ name: 'charge_waived_at', type: 'timestamptz', nullable: true })
+  chargeWaivedAt!: Date | null;
+
+  @Column({ name: 'charge_waived_by', type: 'uuid', nullable: true })
+  chargeWaivedBy!: string | null;
+
+  @Column({ name: 'charge_waived_reason', type: 'varchar', length: 200, nullable: true })
+  chargeWaivedReason!: string | null;
 }

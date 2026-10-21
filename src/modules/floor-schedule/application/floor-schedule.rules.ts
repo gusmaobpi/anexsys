@@ -48,6 +48,19 @@ export function weekdayOfIsoDate(isoDate: string): number {
   return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 }
 
+export function addIsoDays(isoDate: string, days: number): string {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const cursor = new Date(Date.UTC(year, month - 1, day));
+  cursor.setUTCDate(cursor.getUTCDate() + days);
+  return cursor.toISOString().slice(0, 10);
+}
+
+export const FLOOR_DAY_BOARD_AHEAD = 5;
+
+export function dayBoardDates(today: string): string[] {
+  return eachIsoDate(today, addIsoDays(today, FLOOR_DAY_BOARD_AHEAD));
+}
+
 export function eachIsoDate(from: string, to: string): string[] {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) {
     return [];

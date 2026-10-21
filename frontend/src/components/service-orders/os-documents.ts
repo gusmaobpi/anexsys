@@ -40,6 +40,7 @@ export type OpPrintView = {
     promisedDeliveryDate?: string;
     promisedDeliveryTime?: string | null;
     returnKind?: string | null;
+    originFloorNames?: string | null;
   };
   customer: {
     legalName: string;
@@ -188,6 +189,7 @@ export const OP_A5_PRINT_CSS = `
   }
   .op-customer { font-size: 12px; margin: 0; }
   .op-customer strong { font-size: 14px; }
+  .op-tech { font-size: 13px; margin: 8px 0 0; }
   .op-items { width: 100%; border-collapse: collapse; margin: 0; }
   .op-items th {
     font-size: 10px;
@@ -410,6 +412,13 @@ export function buildProductionOrderPrintHtml(
       ${address ? `<br />${escapeHtml(address)}` : ""}
       ${view.customer.phone ? `<br />${escapeHtml(view.customer.phone)}` : ""}
     </p>
+    ${
+      view.serviceOrder.originFloorNames
+        ? `<p class="op-tech">Técnica original: <strong>${escapeHtml(view.serviceOrder.originFloorNames)}</strong></p>`
+        : view.serviceOrder.returnKind
+          ? `<p class="op-tech">Ninguém terminou esta OS no chão.</p>`
+          : ""
+    }
     <table class="op-items">
       <thead>
         <tr>

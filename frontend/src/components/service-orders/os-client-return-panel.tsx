@@ -27,8 +27,11 @@ type Props = {
     executionPeriodDays: number;
   } | null;
   saving?: boolean;
+  floorFinishNames?: string[];
+  canWaiveCharge?: boolean;
   onClose: () => void;
   onConfirm: (itemIds: string[], reason?: string) => Promise<void> | void;
+  onWaive?: (itemIds: string[], reason: string) => Promise<void> | void;
 };
 
 export function OsClientReturnPanel({
@@ -38,14 +41,19 @@ export function OsClientReturnPanel({
   maxPiecesPerBag,
   preview,
   saving = false,
+  floorFinishNames = [],
+  canWaiveCharge = false,
   onClose,
   onConfirm,
+  onWaive,
 }: Props) {
   const selectableItems = items.filter((item) => !item.heldForRework);
   const [selectedIds, setSelectedIds] = useState<string[]>(() => selectableItems.map((item) => item.id));
   const [reason, setReason] = useState("");
+  const [waiveCharge, setWaiveCharge] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isCounter = mode === "counter";
+  const showWaive = !isCounter && preview?.kind === "charged" && canWaiveCharge && Boolean(onWaive);
 
   const selectedCount = selectedIds.length;
   const hint = useMemo(() => {
@@ -79,7 +87,15 @@ export function OsClientReturnPanel({
       setError("Informe o motivo do cliente.");
       return;
     }
+    if (showWaive && waiveCharge && !reason.trim()) {
+      setError("Informe o motivo para abrir sem valor.");
+      return;
+    }
     setError(null);
+    if (showWaive && waiveCharge && onWaive) {
+      await onWaive(selectedIds, reason.trim());
+      return;
+    }
     await onConfirm(selectedIds, reason.trim() || undefined);
   }
 
@@ -90,6 +106,13 @@ export function OsClientReturnPanel({
           {isCounter ? "Refação no balcão" : "Cliente voltou"} · OS {orderNo}
         </h4>
         <p>{hint}</p>
+        {!isCounter ? (
+          <p className="table-subtle">
+            {floorFinishNames.length
+              ? `Técnica original: ${floorFinishNames.join(", ")}`
+              : "Ninguém terminou esta OS no chão."}
+          </p>
+        ) : null}
       </div>
       <div className="os-return-items">
         {selectableItems.map((item, index) => {
@@ -127,10 +150,35 @@ export function OsClientReturnPanel({
           />
         </label>
       ) : null}
+      {showWaive ? (
+        <>
+          <label className="field field--checkbox">
+            <span>Abrir sem valor</span>
+            <input
+              checked={waiveCharge}
+              disabled={saving}
+              onChange={(event) => setWaiveCharge(event.target.checked)}
+              type="checkbox"
+            />
+          </label>
+          {waiveCharge ? (
+            <label className="field">
+              <span>Motivo</span>
+              <textarea
+                disabled={saving}
+                maxLength={200}
+                onChange={(event) => setReason(event.target.value)}
+                rows={3}
+                value={reason}
+              />
+            </label>
+          ) : null}
+        </>
+      ) : null}
       {error ? <p className="workspace-flash workspace-flash--error">{error}</p> : null}
       <div className="button-row">
         <button className="button" disabled={saving || selectedCount === 0} type="submit">
-          {saving ? "Abrindo…" : isCounter ? "Abrir refação" : "Abrir OS de retorno"}
+          {saving ? "Abrindo…" : isCounter ? "Abrir refação" : showWaive && waiveCharge ? "Abrir sem valor" : "Abrir OS de retorno"}
         </button>
         <button className="button-secondary" disabled={saving} onClick={onClose} type="button">
           Cancelar

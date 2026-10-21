@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsEnum, IsOptional, IsString, IsUUID, Length, ValidateIf } from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsEnum, IsOptional, IsString, IsUUID, Length, ValidateIf } from 'class-validator';
 import { CustomerStatus, CustomerType } from 'src/shared/domain/enums';
 
 export class UpdateCustomerRequestDto {
@@ -72,6 +72,10 @@ export class UpdateCustomerRequestDto {
   @IsOptional()
   @IsEnum(CustomerStatus)
   status?: CustomerStatus;
+
+  @IsOptional()
+  @IsBoolean()
+  whatsappConsent?: boolean;
 }
 
 export class UpdateCustomerDto extends UpdateCustomerRequestDto {

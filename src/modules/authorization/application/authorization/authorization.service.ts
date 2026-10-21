@@ -212,6 +212,9 @@ export class AuthorizationService {
     if (role.tenantId !== dto.tenantId) {
       throw new DomainValidationError('Role is outside the tenant scope.');
     }
+    if ((role.code ?? '').toUpperCase() === 'MASTER_ADMINISTRATOR' || dto.code?.trim().toUpperCase() === 'MASTER_ADMINISTRATOR') {
+      throw new DomainValidationError('O papel master não pode ser alterado.');
+    }
 
     if (dto.code) {
       const normalizedCode = dto.code.trim().toUpperCase();
@@ -351,6 +354,9 @@ export class AuthorizationService {
 
   async assignPermissionToRole(dto: AssignPermissionToRoleDto): Promise<void> {
     const role = await this.getRole(dto.roleId);
+    if ((role.code ?? '').toUpperCase() === 'MASTER_ADMINISTRATOR') {
+      throw new DomainValidationError('O papel master não pode ser alterado.');
+    }
     const permission = await this.getPermission(dto.permissionId);
     if (role.tenantId !== dto.tenantId || permission.tenantId !== dto.tenantId) {
       throw new DomainValidationError('Role and permission must belong to the assignment tenant.');
@@ -435,6 +441,7 @@ export class AuthorizationService {
     if (user.tenantId !== dto.tenantId || role.tenantId !== dto.tenantId) {
       throw new DomainValidationError('User and role must belong to the assignment tenant.');
     }
+    await this.assertUserAccessMutable(dto.tenantId, dto.userId);
 
     if (dto.assignedBranchId) {
       const branch = await this.branchService.getById(dto.assignedBranchId);
@@ -491,6 +498,7 @@ export class AuthorizationService {
     if (user.tenantId !== dto.tenantId || community.tenantId !== dto.tenantId) {
       throw new DomainValidationError('User and community must belong to the assignment tenant.');
     }
+    await this.assertUserAccessMutable(dto.tenantId, dto.userId);
 
     const existing = await this.userCommunityRepository.findByUserAndCommunity(dto.tenantId, dto.userId, dto.communityId);
     if (existing) {
@@ -524,6 +532,7 @@ export class AuthorizationService {
     if (user.tenantId !== dto.tenantId || branch.tenantId !== dto.tenantId) {
       throw new DomainValidationError('User and branch must belong to the assignment tenant.');
     }
+    await this.assertUserAccessMutable(dto.tenantId, dto.userId);
 
     const existingScope = await this.userBranchScopeRepository.findByUserBranchAndScope(
       dto.tenantId,
@@ -759,6 +768,12 @@ export class AuthorizationService {
     }
 
     return community;
+  }
+
+  private async assertUserAccessMutable(tenantId: string, userId: string): Promise<void> {
+    if (await this.identityService.userIsMaster(tenantId, userId)) {
+      throw new DomainValidationError('O master só altera a senha.');
+    }
   }
 
   private assertCommunitiesWritable(): void {

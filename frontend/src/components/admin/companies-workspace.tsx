@@ -35,8 +35,8 @@ const emptyForm = (): CompanyForm => ({
   legalName: "",
   displayName: "",
   warrantyAdjustmentPeriodDays: "7",
-  warrantyExecutionPeriodDays: "7",
-  blockDeliveryWithOutstandingBalance: false,
+  warrantyExecutionPeriodDays: "90",
+  blockDeliveryWithOutstandingBalance: true,
 });
 
 function mapCompanyToForm(company: CompanyRecord): CompanyForm {
@@ -45,7 +45,7 @@ function mapCompanyToForm(company: CompanyRecord): CompanyForm {
     legalName: company.legalName,
     displayName: company.displayName,
     warrantyAdjustmentPeriodDays: String(company.warrantyAdjustmentPeriodDays ?? 7),
-    warrantyExecutionPeriodDays: String(company.warrantyExecutionPeriodDays ?? 7),
+    warrantyExecutionPeriodDays: String(company.warrantyExecutionPeriodDays ?? 90),
     blockDeliveryWithOutstandingBalance: company.blockDeliveryWithOutstandingBalance,
   };
 }
@@ -647,7 +647,7 @@ function CompanyFormFields({
         />
       </label>
       <label className="field">
-        <span>Prazo de execução em garantia (dias)</span>
+        <span>Prazo de defeito de execução (dias)</span>
         <input
           inputMode="numeric"
           value={form.warrantyExecutionPeriodDays}
@@ -655,7 +655,7 @@ function CompanyFormFields({
         />
       </label>
       <label className="field field--checkbox">
-        <span>Bloquear entrega por inadimplência</span>
+        <span>Bloquear entrega com saldo</span>
         <input
           checked={form.blockDeliveryWithOutstandingBalance}
           onChange={(event) => setForm((current) => ({ ...current, blockDeliveryWithOutstandingBalance: event.target.checked }))}

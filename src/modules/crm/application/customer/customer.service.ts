@@ -18,6 +18,7 @@ import { CustomerInteractionEntity } from '../../infrastructure/persistence/enti
 import { CustomerContactRepository } from '../../infrastructure/persistence/repositories/customer-contact.repository';
 import { CustomerInteractionRepository } from '../../infrastructure/persistence/repositories/customer-interaction.repository';
 import { CustomerRepository, CustomerSearchFilters } from '../../infrastructure/persistence/repositories/customer.repository';
+import { DEFAULT_CONSENT_TEXT } from 'src/modules/whatsapp/application/whatsapp.rules';
 import { CreateCustomerDto } from '../../contracts/dto/create-customer.dto';
 import { UpdateCustomerDto } from '../../contracts/dto/update-customer.dto';
 
@@ -73,6 +74,9 @@ export class CustomerService {
       postalCode: normalizedPostalCode,
       country: normalizedAddress.country,
       status: CustomerStatus.ACTIVE,
+      whatsappConsent: dto.whatsappConsent === true,
+      whatsappConsentAt: dto.whatsappConsent === true ? new Date() : null,
+      whatsappConsentText: dto.whatsappConsent === true ? await this.currentConsentText(dto.tenantId) : null,
       isDeleted: false,
       deletedAt: null,
       deletedBy: null,
@@ -173,6 +177,14 @@ export class CustomerService {
 
     this.applyAddressUpdates(customer, dto);
     customer.branchId = null;
+
+    if (dto.whatsappConsent !== undefined && dto.whatsappConsent !== customer.whatsappConsent) {
+      customer.whatsappConsent = dto.whatsappConsent;
+      if (dto.whatsappConsent) {
+        customer.whatsappConsentAt = new Date();
+        customer.whatsappConsentText = await this.currentConsentText(tenantId);
+      }
+    }
 
     if (dto.status !== undefined) {
       if (dto.status === CustomerStatus.INACTIVE && previousStatus !== CustomerStatus.INACTIVE) {
@@ -385,7 +397,18 @@ export class CustomerService {
       state: customer.state,
       country: customer.country,
       status: customer.status,
+      whatsappConsent: customer.whatsappConsent,
     };
+  }
+
+  private async currentConsentText(tenantId: string): Promise<string> {
+    try {
+      const rows = await this.dataSource.query(`SELECT consent_text FROM whatsapp_settings WHERE tenant_id = $1`, [tenantId]);
+      const text = rows[0]?.consent_text;
+      return typeof text === 'string' && text.trim() ? text.trim() : DEFAULT_CONSENT_TEXT;
+    } catch {
+      return DEFAULT_CONSENT_TEXT;
+    }
   }
 
   private normalizeBirthDate(value?: string | null): string | null {

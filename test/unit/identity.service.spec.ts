@@ -100,7 +100,7 @@ describe('IdentityService', () => {
 
   it('rejects deleting the last remaining user of the tenant', async () => {
     const service = new IdentityService(
-      { async transaction() { throw new Error('should not run'); } } as never,
+      { async query() { return []; }, async transaction() { throw new Error('should not run'); } } as never,
       {
         async findById() {
           return { id: 'user-2', tenantId: 'tenant-1', email: 'bruno@atelier.com', defaultBranchId: null };
@@ -127,6 +127,9 @@ describe('IdentityService', () => {
     const saved: Record<string, unknown>[] = [];
     const service = new IdentityService(
       {
+        async query() {
+          return [];
+        },
         async transaction<T>(callback: (manager: { save: (entity: unknown, payload: Record<string, unknown>) => Promise<Record<string, unknown>>; update: () => Promise<void>; createQueryBuilder: () => { update: () => { set: () => { where: () => { andWhere: () => { execute: () => Promise<void> } } } } } }) => Promise<T>) {
           return callback({
             async save(_entity, payload) {
@@ -180,5 +183,47 @@ describe('IdentityService', () => {
 
     await service.removeUser('user-2', 'tenant-1', 'user-1');
     assert.equal(saved[0]?.isDeleted, true);
+  });
+
+  it('rejects deleting a user who already has business movement', async () => {
+    const service = new IdentityService(
+      {
+        async query(sql: string) {
+          if (sql.includes('MASTER_ADMINISTRATOR')) {
+            return [];
+          }
+          if (sql.includes('service_orders')) {
+            return [{ ok: 1 }];
+          }
+          return [];
+        },
+        async transaction() {
+          throw new Error('should not run');
+        },
+      } as never,
+      {
+        async findById() {
+          return { id: 'user-2', tenantId: 'tenant-1', email: 'bruno@atelier.com', defaultBranchId: null };
+        },
+        async countLiveByTenant() {
+          return 2;
+        },
+      } as never,
+      {} as never,
+      { async getById() { return { id: 'tenant-1' }; } } as never,
+      {} as never,
+      {} as never,
+      { async record() {} } as never,
+      {} as never,
+    );
+
+    await assert.rejects(
+      () => service.removeUser('user-2', 'tenant-1', 'user-1'),
+      (error: unknown) => {
+        assert.ok(error instanceof DomainValidationError);
+        assert.match(String(error.message), /Inativar/);
+        return true;
+      },
+    );
   });
 });

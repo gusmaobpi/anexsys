@@ -60,4 +60,13 @@ export class CustomerEntity extends SoftDeletableBusinessEntity {
 
   @Column({ name: 'status', type: 'varchar', length: 30, default: CustomerStatus.ACTIVE })
   status!: CustomerStatus;
+
+  @Column({ name: 'whatsapp_consent', type: 'boolean', default: false })
+  whatsappConsent!: boolean;
+
+  @Column({ name: 'whatsapp_consent_at', type: 'timestamptz', nullable: true })
+  whatsappConsentAt!: Date | null;
+
+  @Column({ name: 'whatsapp_consent_text', type: 'text', nullable: true })
+  whatsappConsentText!: string | null;
 }

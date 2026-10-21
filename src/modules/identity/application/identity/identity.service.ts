@@ -236,11 +236,21 @@ export class IdentityService {
 
   async listByTenant(tenantId: string): Promise<UserIdentityEntity[]> {
     await this.tenantService.getById(tenantId);
-    return this.userIdentityRepository.findByTenant(tenantId);
+    const users = await this.userIdentityRepository.findByTenant(tenantId);
+    const masterIds = await this.masterUserIds(tenantId);
+    return users.map((user) => Object.assign(user, { isMaster: masterIds.has(user.id) }));
+  }
+
+  async userIsMaster(tenantId: string, userId: string): Promise<boolean> {
+    const ids = await this.masterUserIds(tenantId, userId);
+    return ids.has(userId);
   }
 
   async updateUser(id: string, dto: UpdateUserDto): Promise<UserIdentityEntity> {
     const user = await this.getById(id);
+    if (await this.userIsMaster(user.tenantId, user.id)) {
+      throw new DomainValidationError('O master só altera a senha.');
+    }
     await this.assertTenantBranchConsistency(user.tenantId, dto.defaultBranchId === undefined ? user.defaultBranchId ?? undefined : dto.defaultBranchId ?? undefined);
 
     if (dto.email) {
@@ -291,6 +301,12 @@ export class IdentityService {
     }
     if (user.id === actorUserId) {
       throw new DomainValidationError('Você não pode excluir o próprio usuário.');
+    }
+    if (await this.userIsMaster(tenantId, user.id)) {
+      throw new DomainValidationError('O master não pode ser excluído.');
+    }
+    if (await this.hasBusinessMovement(tenantId, user.id)) {
+      throw new DomainValidationError('Este usuário já tem movimento no ateliê. Use Inativar. O cadastro permanece e o acesso é bloqueado.');
     }
 
     const liveCount = await this.userIdentityRepository.countLiveByTenant(tenantId);
@@ -364,6 +380,39 @@ export class IdentityService {
         });
 
     return this.userContextPreferenceRepository.save(preference);
+  }
+
+  private async masterUserIds(tenantId: string, userId?: string): Promise<Set<string>> {
+    const rows = await this.dataSource.query(
+      `
+        SELECT a.user_id
+        FROM user_role_assignments a
+        JOIN roles r ON r.id = a.role_id
+        WHERE a.tenant_id = $1
+          AND a.revoked_at IS NULL
+          AND upper(r.code) = 'MASTER_ADMINISTRATOR'
+          AND ($2::uuid IS NULL OR a.user_id = $2::uuid)
+      `,
+      [tenantId, userId ?? null],
+    );
+    return new Set(rows.map((row: { user_id: string }) => row.user_id));
+  }
+
+  private async hasBusinessMovement(tenantId: string, userId: string): Promise<boolean> {
+    const checks = [
+      `SELECT 1 FROM service_orders WHERE tenant_id = $1 AND is_deleted = false AND (created_by = $2 OR commercial_responsible_actor_id = $2 OR technical_measurement_responsible_actor_id = $2) LIMIT 1`,
+      `SELECT 1 FROM payment_records WHERE tenant_id = $1 AND created_by = $2 LIMIT 1`,
+      `SELECT 1 FROM quality_records WHERE tenant_id = $1 AND (created_by = $2 OR quality_responsible_actor_id = $2) LIMIT 1`,
+      `SELECT 1 FROM floor_diary_entries WHERE tenant_id = $1 AND user_id = $2 LIMIT 1`,
+      `SELECT 1 FROM floor_schedule_days d JOIN floor_technicians t ON t.id = d.technician_id WHERE d.tenant_id = $1 AND t.user_id = $2 LIMIT 1`,
+    ];
+    for (const sql of checks) {
+      const rows = await this.dataSource.query(sql, [tenantId, userId]);
+      if (rows.length > 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private async assertTenantBranchConsistency(tenantId: string, defaultBranchId?: string) {
