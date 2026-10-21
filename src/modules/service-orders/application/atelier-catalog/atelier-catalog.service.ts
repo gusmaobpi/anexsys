@@ -220,6 +220,7 @@ export class AtelierCatalogService {
     displayName: string;
     actorUserId: string;
     sortOrder?: number;
+    difficultyGrade?: number | null;
   }) {
     await this.tenantService.getById(input.tenantId);
     const displayName = input.displayName.trim();
@@ -241,6 +242,7 @@ export class AtelierCatalogService {
         displayName,
         defaultPrice: null,
         sortOrder: input.sortOrder ?? 0,
+        difficultyGrade: this.optionalDifficulty(input.difficultyGrade),
         status: MeasurementCatalogStatus.ACTIVE,
         isDeleted: false,
         deletedAt: null,
@@ -268,6 +270,7 @@ export class AtelierCatalogService {
       displayName?: string;
       sortOrder?: number;
       status?: MeasurementCatalogStatus;
+      difficultyGrade?: number | null;
       actorUserId: string;
     },
   ) {
@@ -290,6 +293,9 @@ export class AtelierCatalogService {
     }
     if (input.status !== undefined) {
       entity.status = input.status;
+    }
+    if (input.difficultyGrade !== undefined) {
+      entity.difficultyGrade = this.optionalDifficulty(input.difficultyGrade);
     }
     entity.updatedBy = input.actorUserId;
     const saved = await this.serviceRepository.save(entity);
@@ -628,6 +634,16 @@ export class AtelierCatalogService {
 
   private companyDisplayName(company: { legalName: string; tradeName: string | null }): string {
     return company.tradeName?.trim() || company.legalName;
+  }
+
+  private optionalDifficulty(value: number | null | undefined) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    if (!Number.isInteger(value) || value < 1 || value > 4) {
+      throw new DomainValidationError('O grau de dificuldade fica entre 1 e 4.');
+    }
+    return value;
   }
 
   private requireMinuteRateValue(value: number) {

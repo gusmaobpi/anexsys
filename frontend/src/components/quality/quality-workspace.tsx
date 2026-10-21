@@ -328,7 +328,7 @@ export function QualityWorkspace() {
               </p>
             </div>
             <div className="button-row" style={{ marginTop: 0 }}>
-              {review.phase === "rework_issued" && canWrite ? (
+              {review.phase === "rework_issued" && review.serviceOrder.status === "awaiting_quality" && canWrite ? (
                 <button className="button" disabled={saving} onClick={() => void startReturn()} type="button">
                   Revisar retorno
                 </button>
@@ -357,10 +357,12 @@ export function QualityWorkspace() {
             </div>
           </div>
 
-          {review.phase === "rework_issued" ? (
+          {review.phase === "rework_issued" && review.serviceOrder.status === "awaiting_quality" ? (
+            <p className="field__hint">A refação voltou da esteira. Clique em Revisar retorno para aprovar ou reprovar de novo.</p>
+          ) : null}
+          {review.phase === "rework_issued" && review.serviceOrder.status !== "awaiting_quality" ? (
             <p className="field__hint">
-              Só as peças reprovadas voltaram para a esteira. A OS original continua em Controle de qualidade. Quando a sacola
-              retornar, clique em Revisar retorno.
+              A sacola voltou para Pegar sacola. A revisão do retorno abre depois do Terminei.
             </p>
           ) : null}
           {review.phase === "ready" ? (

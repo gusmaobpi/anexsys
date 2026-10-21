@@ -20,6 +20,7 @@ import { QualityModule } from './modules/quality/quality.module';
 import { ReworkModule } from './modules/rework/rework.module';
 import { WarrantyModule } from './modules/warranty/warranty.module';
 import { FinanceModule } from './modules/finance/finance.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { FloorScheduleModule } from './modules/floor-schedule/floor-schedule.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { EmailModule } from './modules/email/email.module';
@@ -55,6 +56,7 @@ import { patchPostgresQueryRunnerForRls } from './platform/tenancy/tenant-rls.pa
     WarrantyModule,
     FinanceModule,
     FloorScheduleModule,
+    DashboardModule,
     WhatsappModule,
     EmailModule,
     FiscalModule,

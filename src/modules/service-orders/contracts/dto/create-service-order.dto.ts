@@ -9,6 +9,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -153,6 +154,12 @@ export class CreateServiceOrderDto {
   @IsOptional()
   @IsString()
   customerNotes?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  difficultyGrade?: number | null;
 
   @IsArray()
   @ArrayMinSize(1)

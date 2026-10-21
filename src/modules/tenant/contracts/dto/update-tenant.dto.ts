@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, Length, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 
 export class UpdateTenantDto {
   @IsOptional()
@@ -30,6 +30,41 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsBoolean()
   blockDeliveryWithOutstandingBalance?: boolean;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(48)
+  delayAlertLeadHours?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade1Minutes?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade2Minutes?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade3Minutes?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade4Minutes?: number;
 
   @IsUUID()
   actorUserId!: string;

@@ -12,8 +12,8 @@ import {
 import { useSession } from "@/components/providers/session-provider";
 import { printProductionOrderDocument, type OpPrintView } from "@/components/service-orders/os-documents";
 import {
+  beltActionLabel,
   canRunFloorAction,
-  floorActionLabel,
   floorActionSuccessMessage,
 } from "@/components/service-orders/os-floor";
 import { osStatusLabel } from "@/components/service-orders/os-list";
@@ -226,7 +226,7 @@ export function PickBagWorkspace() {
         editLabel="Pegar sacola"
         editLabelForRow={(row) => {
           const action = pickBagAction(row);
-          return action ? floorActionLabel(action) : "Pegar sacola";
+          return action ? beltActionLabel(action) : "Pegar sacola";
         }}
         emptyFilters={{ name: "", status: "" }}
         emptyMessage="Nenhuma OS em aberto para pegar nesta Filial."
@@ -241,6 +241,8 @@ export function PickBagWorkspace() {
               { value: "", label: "Todos" },
               { value: "open", label: "Aberta" },
               { value: "in_production", label: "Em produção" },
+              { value: "quality", label: "Controle de qualidade" },
+              { value: "in_rework", label: "Em refação" },
             ],
           },
         ]}

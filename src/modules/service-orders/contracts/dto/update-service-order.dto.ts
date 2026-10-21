@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Matches, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, Min } from 'class-validator';
 import { DeliveryType, SurchargeMethod } from 'src/shared/domain/enums';
 
 export class UpdateServiceOrderDto {
@@ -78,6 +78,12 @@ export class UpdateServiceOrderDto {
   @IsOptional()
   @IsString()
   customerNotes?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  difficultyGrade?: number | null;
 
   @IsUUID()
   actorUserId!: string;

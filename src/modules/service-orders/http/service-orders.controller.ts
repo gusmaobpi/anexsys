@@ -27,6 +27,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  Max,
   Min,
   MinLength,
   ValidateNested,
@@ -186,6 +187,12 @@ class CreateServiceOrderBody {
   @IsString()
   customerNotes?: string;
 
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  difficultyGrade?: number | null;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
@@ -264,6 +271,12 @@ class UpdateServiceOrderBody {
   @IsOptional()
   @IsString()
   customerNotes?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  difficultyGrade?: number | null;
 }
 
 class DeliveryReleaseBody {

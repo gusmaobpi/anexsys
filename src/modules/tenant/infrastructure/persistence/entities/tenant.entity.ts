@@ -29,6 +29,21 @@ export class TenantEntity extends SoftDeletableBusinessEntity {
   @Column({ name: 'machine_wait_minutes', type: 'integer', default: 3 })
   machineWaitMinutes!: number;
 
+  @Column({ name: 'delay_alert_lead_hours', type: 'integer', default: 2 })
+  delayAlertLeadHours!: number;
+
+  @Column({ name: 'grade_1_minutes', type: 'integer', default: 30 })
+  grade1Minutes!: number;
+
+  @Column({ name: 'grade_2_minutes', type: 'integer', default: 60 })
+  grade2Minutes!: number;
+
+  @Column({ name: 'grade_3_minutes', type: 'integer', default: 90 })
+  grade3Minutes!: number;
+
+  @Column({ name: 'grade_4_minutes', type: 'integer', default: 180 })
+  grade4Minutes!: number;
+
   @Column({ name: 'default_measurement_unit_code', type: 'varchar', length: 20, default: 'CM' })
   defaultMeasurementUnitCode!: string;
 

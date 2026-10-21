@@ -18,6 +18,7 @@ export type AtelierCatalogRecord = {
   defaultPrice: string | null;
   sortOrder: number;
   status: "active" | "inactive";
+  difficultyGrade?: number | null;
 };
 
 export function atelierCatalogStatusLabel(status: AtelierCatalogRecord["status"]) {

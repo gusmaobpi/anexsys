@@ -67,6 +67,7 @@ export type OpPrintView = {
   }>;
   qrCode: { codeValue: string; reissueNo: number } | null;
   version?: { versionNo: number; versionReason: string } | null;
+  floorPassNames?: string | null;
 };
 
 function escapeHtml(value: string | null | undefined) {
@@ -415,8 +416,15 @@ export function buildProductionOrderPrintHtml(
     ${
       view.serviceOrder.originFloorNames
         ? `<p class="op-tech">Técnica original: <strong>${escapeHtml(view.serviceOrder.originFloorNames)}</strong></p>`
-        : view.serviceOrder.returnKind
+        : view.serviceOrder.returnKind && view.version?.versionReason !== "rework"
           ? `<p class="op-tech">Ninguém terminou esta OS no chão.</p>`
+          : ""
+    }
+    ${
+      view.version?.versionReason === "rework" && view.floorPassNames
+        ? `<p class="op-tech">Refação: <strong>${escapeHtml(view.floorPassNames)}</strong></p>`
+        : !view.serviceOrder.originFloorNames && view.floorPassNames
+          ? `<p class="op-tech">Produção: <strong>${escapeHtml(view.floorPassNames)}</strong></p>`
           : ""
     }
     <table class="op-items">

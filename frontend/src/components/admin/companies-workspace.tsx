@@ -28,6 +28,11 @@ type CompanyForm = {
   warrantyAdjustmentPeriodDays: string;
   warrantyExecutionPeriodDays: string;
   blockDeliveryWithOutstandingBalance: boolean;
+  delayAlertLeadHours: string;
+  grade1Minutes: string;
+  grade2Minutes: string;
+  grade3Minutes: string;
+  grade4Minutes: string;
 };
 
 const emptyForm = (): CompanyForm => ({
@@ -37,6 +42,11 @@ const emptyForm = (): CompanyForm => ({
   warrantyAdjustmentPeriodDays: "7",
   warrantyExecutionPeriodDays: "90",
   blockDeliveryWithOutstandingBalance: true,
+  delayAlertLeadHours: "2",
+  grade1Minutes: "30",
+  grade2Minutes: "60",
+  grade3Minutes: "90",
+  grade4Minutes: "180",
 });
 
 function mapCompanyToForm(company: CompanyRecord): CompanyForm {
@@ -47,6 +57,11 @@ function mapCompanyToForm(company: CompanyRecord): CompanyForm {
     warrantyAdjustmentPeriodDays: String(company.warrantyAdjustmentPeriodDays ?? 7),
     warrantyExecutionPeriodDays: String(company.warrantyExecutionPeriodDays ?? 90),
     blockDeliveryWithOutstandingBalance: company.blockDeliveryWithOutstandingBalance,
+    delayAlertLeadHours: String(company.delayAlertLeadHours ?? 2),
+    grade1Minutes: String(company.grade1Minutes ?? 30),
+    grade2Minutes: String(company.grade2Minutes ?? 60),
+    grade3Minutes: String(company.grade3Minutes ?? 90),
+    grade4Minutes: String(company.grade4Minutes ?? 180),
   };
 }
 
@@ -257,8 +272,13 @@ export function CompaniesWorkspace() {
           legalName: form.legalName,
           displayName: form.displayName,
           warrantyAdjustmentPeriodDays: Number(form.warrantyAdjustmentPeriodDays || 7),
-          warrantyExecutionPeriodDays: Number(form.warrantyExecutionPeriodDays || 7),
+          warrantyExecutionPeriodDays: Number(form.warrantyExecutionPeriodDays || 90),
           blockDeliveryWithOutstandingBalance: form.blockDeliveryWithOutstandingBalance,
+          delayAlertLeadHours: Number(form.delayAlertLeadHours || 2),
+          grade1Minutes: Number(form.grade1Minutes || 30),
+          grade2Minutes: Number(form.grade2Minutes || 60),
+          grade3Minutes: Number(form.grade3Minutes || 90),
+          grade4Minutes: Number(form.grade4Minutes || 180),
         }),
       });
       const created = normalizeCompanyRecord(createdResponse, companies.length);
@@ -289,8 +309,13 @@ export function CompaniesWorkspace() {
           legalName: form.legalName,
           displayName: form.displayName,
           warrantyAdjustmentPeriodDays: Number(form.warrantyAdjustmentPeriodDays || 7),
-          warrantyExecutionPeriodDays: Number(form.warrantyExecutionPeriodDays || 7),
+          warrantyExecutionPeriodDays: Number(form.warrantyExecutionPeriodDays || 90),
           blockDeliveryWithOutstandingBalance: form.blockDeliveryWithOutstandingBalance,
+          delayAlertLeadHours: Number(form.delayAlertLeadHours || 2),
+          grade1Minutes: Number(form.grade1Minutes || 30),
+          grade2Minutes: Number(form.grade2Minutes || 60),
+          grade3Minutes: Number(form.grade3Minutes || 90),
+          grade4Minutes: Number(form.grade4Minutes || 180),
         }),
       });
       const updated = normalizeCompanyRecord(updatedResponse, 0, { fallbackId: activeCompany.id });
@@ -662,6 +687,31 @@ function CompanyFormFields({
           type="checkbox"
         />
       </label>
+      <label className="field">
+        <span>Alerta de atraso (horas antes do prazo)</span>
+        <input
+          inputMode="numeric"
+          value={form.delayAlertLeadHours}
+          onChange={(event) => setForm((current) => ({ ...current, delayAlertLeadHours: event.target.value.replace(/\D/g, "") }))}
+        />
+      </label>
+      <label className="field">
+        <span>Grau 1 (minutos)</span>
+        <input inputMode="numeric" value={form.grade1Minutes} onChange={(event) => setForm((current) => ({ ...current, grade1Minutes: event.target.value.replace(/\D/g, "") }))} />
+      </label>
+      <label className="field">
+        <span>Grau 2 (minutos)</span>
+        <input inputMode="numeric" value={form.grade2Minutes} onChange={(event) => setForm((current) => ({ ...current, grade2Minutes: event.target.value.replace(/\D/g, "") }))} />
+      </label>
+      <label className="field">
+        <span>Grau 3 (minutos)</span>
+        <input inputMode="numeric" value={form.grade3Minutes} onChange={(event) => setForm((current) => ({ ...current, grade3Minutes: event.target.value.replace(/\D/g, "") }))} />
+      </label>
+      <label className="field">
+        <span>Grau 4 (minutos)</span>
+        <input inputMode="numeric" value={form.grade4Minutes} onChange={(event) => setForm((current) => ({ ...current, grade4Minutes: event.target.value.replace(/\D/g, "") }))} />
+      </label>
+      <p className="field__hint">O padrão é 30, 60, 90 e 180 minutos. O alerta avisa a OS que ainda não está pronta para retirada.</p>
     </>
   );
 }

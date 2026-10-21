@@ -40,6 +40,7 @@ import {
   WORKSPACE_QUERY_PARAM,
 } from "@/components/app-shell/workspace-manager-store";
 import { useWorkspacePane } from "@/components/app-shell/workspace-pane";
+import { DashboardAlertsChip } from "@/components/app-shell/dashboard-alerts";
 import { FloorDayBoardChip } from "@/components/production/floor-day-board";
 import { clearLegacyWorkspaceStores, WORKSPACE_STORAGE_KEY } from "@/components/app-shell/workspace-storage";
 
@@ -734,6 +735,7 @@ export function TopbarChipTray() {
         Dashboard
       </button>
       <FloorDayBoardChip />
+      <DashboardAlertsChip />
     </div>
   );
 }

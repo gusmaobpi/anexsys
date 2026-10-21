@@ -216,6 +216,106 @@ describe('QualityService', () => {
     assert.equal(response.printView.items[0]?.rejectionReason, 'Barra curta');
   });
 
+  it('shows approve on a returned rework bag and does not open another version for the other piece', async () => {
+    const records: Array<Record<string, unknown>> = [
+      {
+        id: 'old-1',
+        serviceOrderItemId: 'item-1',
+        inspectionAt: '2026-10-07T10:00:00.000Z',
+        releaseDecision: QualityReleaseDecision.REJECTED,
+        notes: 'Barra',
+      },
+      {
+        id: 'old-2',
+        serviceOrderItemId: 'item-2',
+        inspectionAt: '2026-10-07T10:00:00.000Z',
+        releaseDecision: QualityReleaseDecision.REJECTED,
+        notes: 'Cós',
+      },
+    ];
+    const reworkCalls: Array<Record<string, unknown>> = [];
+    const details = {
+      productionOrder: { id: 'production-1', productionNo: 'PO-1', branchId: 'branch-1' },
+      serviceOrder: {
+        id: 'so-1',
+        orderNo: 'AAA000042',
+        status: 'awaiting_quality',
+        bagClosed: true,
+        openedAt: '2026-10-03T10:00:00.000Z',
+        promisedDeliveryDate: '2026-10-18',
+      },
+      customer: { legalName: 'Sandra', phone: null },
+      items: [
+        { id: 'item-1', itemType: 'Calça', description: 'Bainha', complement: 'ok', brand: 'Zara', model: '', serialNo: '' },
+        { id: 'item-2', itemType: 'Saia', description: 'Barra', complement: 'curta', brand: 'Zara', model: '', serialNo: '' },
+      ],
+      versions: [
+        {
+          isActive: true,
+          versionNo: 2,
+          versionReason: 'rework',
+          affectedServiceOrderItemIds: ['item-1', 'item-2'],
+        },
+      ],
+    };
+    const service = new QualityService(
+      {
+        async findById(id: string) {
+          return records.find((record) => record.id === id) ?? null;
+        },
+        async findByProductionOrder() {
+          return records;
+        },
+        async save(payload: Record<string, unknown>) {
+          const index = records.findIndex((record) => record.id === payload.id);
+          if (index >= 0) records[index] = { ...records[index], ...payload };
+          else records.push(payload);
+          return payload;
+        },
+        create(payload: Record<string, unknown>) {
+          return payload;
+        },
+      } as never,
+      {} as never,
+      {
+        async getDetails() {
+          return details;
+        },
+        async getDetailsByServiceOrder() {
+          return details;
+        },
+      } as never,
+      {
+        async applyQualityStatus(_id: string, _tenant: string, status: string) {
+          details.serviceOrder.status = status;
+          return details.serviceOrder;
+        },
+      } as never,
+      {} as never,
+      {} as never,
+      { async record() {}, async listByEntity() { return []; } } as never,
+      {
+        async create(payload: Record<string, unknown>) {
+          reworkCalls.push(payload);
+          return { id: 'rework-2' };
+        },
+      } as never,
+      {} as never,
+    );
+
+    const review = await service.getReview('tenant-1', 'so-1', ['branch-1']);
+    assert.equal(review.phase, 'needs_review');
+    assert.equal(review.items.find((item) => item.id === 'item-1')?.canDecide, true);
+    assert.equal(review.items.find((item) => item.id === 'item-2')?.decision, 'pending');
+
+    const response = await service.decideItem('tenant-1', 'so-1', 'item-1', 'user-1', ['branch-1'], 'approved');
+    assert.equal(response.issuedRework, false);
+    assert.equal(response.review.phase, 'needs_review');
+    assert.equal(response.review.items.find((item) => item.id === 'item-1')?.decision, 'approved');
+    assert.equal(response.review.items.find((item) => item.id === 'item-2')?.canDecide, true);
+    assert.equal(reworkCalls.length, 0);
+  });
+
   it('lists only closed bags waiting for quality review', async () => {
     const detailsById: Record<string, { serviceOrder: Record<string, unknown>; customer: { legalName: string }; productionOrder?: { productionNo: string }; versions: unknown[] }> = {
       'po-open-bag': {

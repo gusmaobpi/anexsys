@@ -19,6 +19,9 @@ export class AtelierServiceEntity extends SoftDeletableBusinessEntity {
   @Column({ name: 'sort_order', type: 'integer', default: 0 })
   sortOrder!: number;
 
+  @Column({ name: 'difficulty_grade', type: 'smallint', nullable: true })
+  difficultyGrade!: number | null;
+
   @Column({ name: 'status', type: 'varchar', length: 30, default: MeasurementCatalogStatus.ACTIVE })
   status!: MeasurementCatalogStatus;
 }

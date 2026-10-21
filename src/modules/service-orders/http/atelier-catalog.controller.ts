@@ -13,7 +13,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { DependencyValidationService } from 'src/modules/governance/application/dependency-validation.service';
 import { Permissions } from 'src/platform/auth/permissions.decorator';
 import { CurrentRequest, CurrentTenantId } from 'src/platform/http/request-context.decorators';
@@ -30,6 +30,12 @@ class CreateCatalogNameBody {
   @IsInt()
   @Min(0)
   sortOrder?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  difficultyGrade?: number | null;
 }
 
 class PatchCatalogNameBody {
@@ -46,6 +52,12 @@ class PatchCatalogNameBody {
   @IsOptional()
   @IsEnum(MeasurementCatalogStatus)
   status?: MeasurementCatalogStatus;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  difficultyGrade?: number | null;
 }
 
 class CreateProductServiceBody {
@@ -251,6 +263,7 @@ export class AtelierServicesController {
       tenantId: tenantId as string,
       displayName: body.displayName,
       sortOrder: body.sortOrder,
+      difficultyGrade: body.difficultyGrade,
       actorUserId: principal.userId,
     });
   }
@@ -269,6 +282,7 @@ export class AtelierServicesController {
       displayName: body.displayName,
       sortOrder: body.sortOrder,
       status: body.status,
+      difficultyGrade: body.difficultyGrade,
       actorUserId: principal.userId,
     });
   }

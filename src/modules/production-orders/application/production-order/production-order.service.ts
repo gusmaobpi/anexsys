@@ -750,6 +750,18 @@ export class ProductionOrderService {
         ? await this.latestRejectionReasons(productionOrderId)
         : new Map<string, string>();
     const proofNotes = await this.serviceOrderService.latestProofNotesByItem(details.serviceOrder.id);
+    const reworkPrint = Boolean(
+      activeVersion &&
+        [ProductionOrderVersionReason.REWORK, ProductionOrderVersionReason.WARRANTY_EXECUTION, ProductionOrderVersionReason.CORRECTIVE_PRODUCTION].includes(
+          activeVersion.versionReason,
+        ),
+    );
+    const floorPassNames = await this.serviceOrderService.passFinishNames(
+      tenantId,
+      details.serviceOrder.id,
+      reworkPrint ? 'rework' : 'production',
+      reworkPrint ? activeVersion?.id ?? null : null,
+    );
 
     return {
       productionOrderId: details.productionOrder.id,
@@ -764,6 +776,7 @@ export class ProductionOrderService {
         returnKind: details.serviceOrder.returnKind ?? null,
         originFloorNames: details.serviceOrder.originFloorNames ?? null,
       },
+      floorPassNames,
       customer: {
         id: details.customer.id,
         legalName: details.customer.legalName,

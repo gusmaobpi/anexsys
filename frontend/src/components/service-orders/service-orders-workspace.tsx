@@ -102,6 +102,7 @@ type ServiceOrderRecord = {
   outstandingBalance?: string | null;
   amountPaid?: string | null;
   payLockedOnParent?: boolean;
+  difficultyGrade?: number | null;
 };
 
 type ActorSummary = {
@@ -200,6 +201,7 @@ type ServiceOrderHeaderForm = {
   attendantId: string;
   commercialNotes: string;
   customerNotes: string;
+  difficultyGrade: string;
 };
 
 function padDatePart(value: number) {
@@ -262,6 +264,7 @@ function createEmptyHeaderForm(attendantId = ""): ServiceOrderHeaderForm {
     attendantId,
     commercialNotes: "",
     customerNotes: DEFAULT_CUSTOMER_NOTE,
+    difficultyGrade: "",
   };
 }
 
@@ -275,6 +278,7 @@ function mapDetailsToHeaderForm(details: ServiceOrderDetail): ServiceOrderHeader
     attendantId: details.serviceOrder.commercialResponsibleActorId ?? details.commercialResponsible?.id ?? "",
     commercialNotes: details.serviceOrder.commercialNotes ?? "",
     customerNotes: details.serviceOrder.customerNotes ?? "",
+    difficultyGrade: details.serviceOrder.difficultyGrade ? String(details.serviceOrder.difficultyGrade) : "",
   };
 }
 
@@ -1721,6 +1725,7 @@ export function ServiceOrdersWorkspace() {
           operationalPriority: headerForm.operationalPriority || undefined,
           commercialNotes: headerForm.commercialNotes || undefined,
           customerNotes: headerForm.customerNotes || undefined,
+          difficultyGrade: headerForm.difficultyGrade ? Number(headerForm.difficultyGrade) : null,
           items: buildCreateServiceOrderItemsPayload(itemRows),
         }),
       });
@@ -1753,6 +1758,7 @@ export function ServiceOrdersWorkspace() {
         operationalPriority: headerForm.operationalPriority || undefined,
         commercialNotes: headerForm.commercialNotes || null,
         customerNotes: headerForm.customerNotes || null,
+        difficultyGrade: headerForm.difficultyGrade ? Number(headerForm.difficultyGrade) : null,
       }),
     });
 
@@ -2576,6 +2582,20 @@ export function ServiceOrdersWorkspace() {
                             }))
                           }
                         />
+                      </label>
+                      <label className="field">
+                        <span>Grau</span>
+                        <select
+                          disabled={saving || (!showCreateForm && !canEditSelectedOrder)}
+                          value={headerForm.difficultyGrade}
+                          onChange={(event) => setHeaderForm((current) => ({ ...current, difficultyGrade: event.target.value }))}
+                        >
+                          <option value="">Maior dos serviços</option>
+                          <option value="1">1</option>
+                          <option value="2">2</option>
+                          <option value="3">3</option>
+                          <option value="4">4</option>
+                        </select>
                       </label>
                       <label className="field">
                         <span>Prioridade</span>

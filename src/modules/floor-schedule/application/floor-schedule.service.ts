@@ -5,7 +5,7 @@ import { AuditService } from 'src/modules/audit/application/audit/audit.service'
 import { IdentityService } from 'src/modules/identity/application/identity/identity.service';
 import { ProductionOrderService } from 'src/modules/production-orders/application/production-order/production-order.service';
 import { QualityService } from 'src/modules/quality/application/quality/quality.service';
-import { floorActionLabel, nextFloorAction } from 'src/modules/service-orders/application/service-order/service-order-floor';
+import { beltFloorActionLabel, nextFloorAction } from 'src/modules/service-orders/application/service-order/service-order-floor';
 import { ServiceOrderService } from 'src/modules/service-orders/application/service-order/service-order.service';
 import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
 import {
@@ -766,12 +766,15 @@ export class FloorScheduleService {
     if (!action || action === 'open_review') {
       throw new DomainValidationError('Esta OP não está disponível para pegar ou terminar.');
     }
+    if (action === 'pick_up_rework' && !(await this.serviceOrderService.isReworkWaitingOnBelt(tenantId, card.serviceOrderId))) {
+      throw new DomainValidationError('Esta OP ainda está no controle de qualidade.');
+    }
     return {
       purpose: 'production' as const,
       serviceOrderId: card.serviceOrderId,
       card,
       action,
-      actionLabel: action ? floorActionLabel(action) : null,
+      actionLabel: beltFloorActionLabel(action),
       openCamera: false,
     };
   }

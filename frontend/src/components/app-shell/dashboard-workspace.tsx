@@ -1,58 +1,71 @@
 "use client";
 
 import { useWorkspaceRegistration } from "@/components/app-shell/workspace-manager";
-import { empresaLabel } from "@/components/providers/session-context";
+import { DashboardAlertLists, useDashboardHome } from "@/components/app-shell/dashboard-alerts";
 import { useSession } from "@/components/providers/session-provider";
 
 export function DashboardWorkspace() {
   useWorkspaceRegistration({ label: "Dashboard" });
   const { session } = useSession();
-  const activeConta = session?.companies.find((company) => company.tenantId === session?.tenantId) ?? null;
-  const activeEmpresa = (session?.empresas ?? []).find((empresa) => empresa.id === session?.activeEmpresaId) ?? null;
-  const activeBranch = session?.branches.find((branch) => branch.id === session?.activeBranchId) ?? null;
+  const { home, error } = useDashboardHome();
+  const branchName = session?.branches.find((branch) => branch.id === session.activeBranchId)?.label ?? "Filial";
 
   return (
     <>
       <section className="hero-card">
-        <div className="eyebrow">ANEXSYS</div>
-        <h1 className="title">Dashboard placeholder</h1>
-        <p>
-          Conta isola o ateliê. Empresa é o CNPJ. Filial é o ponto físico. Clientes e medidas são da Conta e valem para
-          todas as Empresas.
-        </p>
+        <div className="eyebrow">Produção de hoje</div>
+        <h1 className="title">{branchName}</h1>
+        <p>Quem terminou sacola hoje, o que está perto do prazo e o que ainda não tem assinatura do cliente.</p>
       </section>
 
-      <section className="card-grid">
-        <article className="mini-card">
-          <h3>Authenticated session</h3>
-          <ul className="placeholder-list">
-            <li>User: {session?.user?.displayName ?? "-"}</li>
-            <li>Email: {session?.user?.email ?? "-"}</li>
-            <li>Conta: {activeConta?.displayName ?? "Não selecionada"}</li>
-            <li>Empresa: {activeEmpresa ? empresaLabel(activeEmpresa) : "Não selecionada"}</li>
-            <li>Filial: {activeBranch?.label ?? "Não selecionada"}</li>
-          </ul>
-        </article>
-
-        <article className="mini-card">
-          <h3>Navigation and access</h3>
-          <p>Navigation in the sidebar is adapted to the access available in the current company and filial.</p>
-          <ul className="placeholder-list">
-            <li>Company and filial reopen from the last valid context when possible</li>
-            <li>Visible areas follow the current access context</li>
-            <li>Protected routes reopen login or context selection when needed</li>
-          </ul>
-        </article>
-
-        <article className="mini-card">
-          <h3>Next Sprint hooks</h3>
-          <ul className="placeholder-list">
-            <li>Customer Directory will plug into this shell in Sprint 2</li>
-            <li>Dashboard cards will evolve into KPI read models in later sprints</li>
-            <li>Error handling and logout flow are already centralized</li>
-          </ul>
-        </article>
-      </section>
+      {error ? <p className="error-text">{error}</p> : null}
+      {!home && !error ? <p className="field__hint">Carregando…</p> : null}
+      {home ? (
+        <section className="card-grid">
+          <article className="mini-card">
+            <h3>Tempos por grau</h3>
+            <ul className="placeholder-list">
+              {home.grades.map((grade) => (
+                <li key={grade.grade}>
+                  Grau {grade.grade}: {grade.minutes} min
+                </li>
+              ))}
+            </ul>
+            <p className="field__hint">Estes minutos vêm da Conta e estimam a OS pelo grau. O bônus por produtividade ainda não tem regra de cálculo.</p>
+          </article>
+          <article className="mini-card">
+            <h3>Quem produziu</h3>
+            {home.produced.length === 0 ? <p className="field__hint">Ninguém clicou Terminei hoje nesta filial.</p> : null}
+            {home.produced.length > 0 ? (
+              <div className="data-table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Peças</th>
+                      <th>OS</th>
+                      <th>Graus</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {home.produced.map((row) => (
+                      <tr key={row.userId}>
+                        <td>{row.displayName}</td>
+                        <td>{row.pieces}</td>
+                        <td>{row.orderNos.join(", ")}</td>
+                        <td>{row.grades.length === 0 ? "Sem grau" : row.grades.join(", ")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </article>
+          <article className="mini-card">
+            <DashboardAlertLists home={home} />
+          </article>
+        </section>
+      ) : null}
     </>
   );
 }

@@ -35,10 +35,10 @@ import {
   belongsToQualityQueue,
   currentReviewItemIds,
   currentRoundFinished,
-  deriveReviewPhase,
   isReworkWaitingReturn,
   latestQualityRecordByItem,
-  pieceReviewState,
+  reviewPhase,
+  reviewPieceState,
   type QualityReviewPhase,
 } from './quality-review';
 
@@ -298,7 +298,14 @@ export class QualityService {
     decision: 'approved' | 'rejected',
     reason?: string | null,
   ) {
-    const built = await this.buildReview(tenantId, serviceOrderId, accessibleBranchIds);
+    let built = await this.buildReview(tenantId, serviceOrderId, accessibleBranchIds);
+    if (built.review.phase === 'rework_issued') {
+      throw new DomainValidationError('A sacola está na esteira. A revisão do retorno abre depois do Terminei.');
+    }
+    if (this.returnStillClosed(built)) {
+      await this.openReturnRound(built, tenantId, actorUserId);
+      built = await this.buildReview(tenantId, serviceOrderId, accessibleBranchIds);
+    }
     const item = built.review.items.find((row) => row.id === serviceOrderItemId);
     if (!item) {
       throw new DomainValidationError('Esta peça não pertence à Ordem de Produção da OS.');
@@ -346,11 +353,35 @@ export class QualityService {
 
   async startReturn(tenantId: string, serviceOrderId: string, actorUserId: string, accessibleBranchIds: string[]) {
     const built = await this.buildReview(tenantId, serviceOrderId, accessibleBranchIds);
-    if (built.review.phase !== 'rework_issued') {
+    if (!this.returnStillClosed(built)) {
+      if (built.review.phase === 'rework_issued') {
+        throw new DomainValidationError('A sacola ainda está na esteira. A revisão do retorno abre depois do Terminei.');
+      }
       throw new DomainValidationError('Só é possível revisar o retorno quando há peças em refação.');
     }
+    await this.openReturnRound(built, tenantId, actorUserId);
+    return this.getReview(tenantId, serviceOrderId, accessibleBranchIds);
+  }
+
+  private returnStillClosed(built: Awaited<ReturnType<QualityService['buildReview']>>) {
+    if (built.review.serviceOrder.status !== ServiceOrderStatus.AWAITING_QUALITY) {
+      return false;
+    }
+    const currentIds = built.review.items.filter((row) => row.inCurrentRound).map((row) => row.id);
+    return isReworkWaitingReturn(built.activeVersion, built.latestByItem, currentIds);
+  }
+
+  private async openReturnRound(
+    built: Awaited<ReturnType<QualityService['buildReview']>>,
+    tenantId: string,
+    actorUserId: string,
+  ) {
     const currentIds = built.review.items.filter((row) => row.inCurrentRound).map((row) => row.id);
     for (const serviceOrderItemId of currentIds) {
+      const latest = built.latestByItem.get(serviceOrderItemId);
+      if (latest?.releaseDecision === QualityReleaseDecision.PENDING) {
+        continue;
+      }
       await this.createRecord({
         tenantId,
         actorUserId,
@@ -360,12 +391,11 @@ export class QualityService {
       });
     }
     await this.serviceOrderService.applyQualityStatus(
-      serviceOrderId,
+      built.review.serviceOrder.id,
       tenantId,
       ServiceOrderStatus.QUALITY,
       actorUserId,
     );
-    return this.getReview(tenantId, serviceOrderId, accessibleBranchIds);
   }
 
   private async completeRound(
@@ -440,7 +470,7 @@ export class QualityService {
     const items = details.items.map((item) => {
       const latest = latestByItem.get(item.id);
       const inCurrentRound = currentIds.has(item.id);
-      const state = pieceReviewState(latest, inCurrentRound, reworkWaitingReturn);
+      const state = reviewPieceState(latest, inCurrentRound, reworkWaitingReturn, details.serviceOrder.status);
       return {
         id: item.id,
         itemType: item.itemType,
@@ -458,9 +488,7 @@ export class QualityService {
     });
 
     const allItemsApproved = items.length > 0 && items.every((item) => item.decision === 'approved');
-    const phase: QualityReviewPhase = details.serviceOrder.status === ServiceOrderStatus.READY_FOR_PICKUP
-      ? 'ready'
-      : deriveReviewPhase({ allItemsApproved, reworkWaitingReturn });
+    const phase: QualityReviewPhase = reviewPhase(details.serviceOrder.status, allItemsApproved, reworkWaitingReturn);
 
     return {
       latestByItem,

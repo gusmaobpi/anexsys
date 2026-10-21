@@ -43,6 +43,9 @@ describe('TenantService', () => {
     assert.equal(tenant.blockDeliveryWithOutstandingBalance, true);
     assert.equal(tenant.maxPiecesPerBag, 5);
     assert.equal(tenant.machineWaitMinutes, 3);
+    assert.equal(tenant.delayAlertLeadHours, 2);
+    assert.equal(tenant.grade1Minutes, 30);
+    assert.equal(tenant.grade4Minutes, 180);
     assert.equal(auditCalls[0]?.action, 'tenant.created');
     assert.equal(auditCalls[0]?.newValues?.code, 'ATELIER');
   });

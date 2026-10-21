@@ -23,6 +23,7 @@ type CatalogForm = {
   displayName: string;
   defaultPrice: string;
   sortOrder: string;
+  difficultyGrade: string;
 };
 
 type Props = {
@@ -33,6 +34,7 @@ const emptyForm = (): CatalogForm => ({
   displayName: "",
   defaultPrice: "",
   sortOrder: "0",
+  difficultyGrade: "",
 });
 
 function toListRecord(record: {
@@ -42,6 +44,7 @@ function toListRecord(record: {
   defaultPrice?: string | null;
   sortOrder: number;
   status?: "active" | "inactive";
+  difficultyGrade?: number | null;
 }): AtelierCatalogRecord {
   return {
     id: record.id,
@@ -50,6 +53,7 @@ function toListRecord(record: {
     defaultPrice: record.defaultPrice ?? null,
     sortOrder: record.sortOrder,
     status: record.status === "inactive" ? "inactive" : "active",
+    difficultyGrade: record.difficultyGrade ?? null,
   };
 }
 
@@ -340,6 +344,7 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
       displayName: record.displayName,
       defaultPrice: record.defaultPrice ?? "",
       sortOrder: String(record.sortOrder ?? 0),
+      difficultyGrade: record.difficultyGrade ? String(record.difficultyGrade) : "",
     });
     clearDuplicate();
   }, [clearDuplicate, focusRecordId, records, setForm, workspaceMode]);
@@ -365,6 +370,7 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
         body: JSON.stringify({
           displayName: form.displayName,
           sortOrder: Number(form.sortOrder || 0),
+          ...(mode === "services" ? { difficultyGrade: form.difficultyGrade ? Number(form.difficultyGrade) : null } : {}),
         }),
       });
       const mapped = toListRecord(created);
@@ -401,6 +407,7 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
         body: JSON.stringify({
           displayName: form.displayName,
           sortOrder: Number(form.sortOrder || 0),
+          ...(mode === "services" ? { difficultyGrade: form.difficultyGrade ? Number(form.difficultyGrade) : null } : {}),
         }),
       });
       const mapped = toListRecord(updated);
@@ -549,6 +556,21 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
                   onChange={(event) => setForm((current) => ({ ...current, sortOrder: event.target.value }))}
                 />
               </label>
+              {mode === "services" ? (
+                <label className="field">
+                  <span>Grau de dificuldade</span>
+                  <select
+                    value={form.difficultyGrade}
+                    onChange={(event) => setForm((current) => ({ ...current, difficultyGrade: event.target.value }))}
+                  >
+                    <option value="">Sem grau</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                  </select>
+                </label>
+              ) : null}
               <div className="button-row">
                 <button className="button" disabled={saving || duplicateStatus !== "idle"} type="submit">
                   {saving ? "Gravando…" : "Gravar"}

@@ -40,6 +40,12 @@ export function floorActionLabel(action: FloorAction): string {
   return 'Terminei a refação';
 }
 
+export function beltFloorActionLabel(action: FloorAction): string {
+  if (action === 'pick_up' || action === 'pick_up_rework') return 'Pegar sacola';
+  if (action === 'finish_production' || action === 'finish_rework') return 'Terminei';
+  return floorActionLabel(action);
+}
+
 export function floorActionResultStatus(action: FloorAction): ServiceOrderStatus {
   if (action === 'pick_up') {
     return ServiceOrderStatus.IN_PRODUCTION;

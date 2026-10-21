@@ -57,7 +57,7 @@ type QualityPiece = {
 };
 type QualityReview = {
   phase: "needs_review" | "rework_issued" | "ready";
-  serviceOrder: { id: string; orderNo: string };
+  serviceOrder: { id: string; orderNo: string; status?: string };
   items: QualityPiece[];
 };
 
@@ -257,7 +257,7 @@ export function FloorPhone() {
             <>
               <p>Você está com a OS {holding.orderNo}.</p>
               <button className="button" disabled={busy} onClick={() => void advance(holding.id)} type="button">
-                {holding.status === "in_rework" ? "Terminei a refação" : "Terminei"}
+                Terminei
               </button>
             </>
           ) : session.status === "active" ? (
@@ -299,8 +299,11 @@ export function FloorPhone() {
       {review ? (
         <article>
           <h2>OS {review.serviceOrder.orderNo}</h2>
-          {review.phase === "rework_issued" && session?.status === "active" ? (
+          {review.phase === "rework_issued" && review.serviceOrder.status === "awaiting_quality" && session?.status === "active" ? (
             <button className="button" disabled={busy} onClick={() => void startReturn()} type="button">Revisar retorno</button>
+          ) : null}
+          {review.phase === "rework_issued" && review.serviceOrder.status !== "awaiting_quality" ? (
+            <p>A sacola voltou para Pegar sacola. A revisão do retorno abre depois do Terminei.</p>
           ) : null}
           {review.items.map((item, index) => (
             <div key={item.id}>

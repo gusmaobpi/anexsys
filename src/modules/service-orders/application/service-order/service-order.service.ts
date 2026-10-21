@@ -189,6 +189,7 @@ export class ServiceOrderService {
       deliveryCommitmentSourceAt,
       promisedDeliveryDate,
       promisedDeliveryTime,
+      difficultyGrade: this.optionalDifficulty(dto.difficultyGrade),
       actualPickupDate: dto.actualPickupDate ?? null,
       originServiceOrderId: null,
       returnKind: null,
@@ -327,7 +328,14 @@ export class ServiceOrderService {
       membersByGroup.set(groupId, current);
     }
     const memberIds = [...new Set((siblings.length > 0 ? siblings : orders).map((order) => order.id))];
-    const [paidById, heldById] = await Promise.all([this.readPaidByOrderIds(memberIds), this.readHeldByOrderIds(memberIds)]);
+    const [paidById, heldById, reworkWaitingIds] = await Promise.all([
+      this.readPaidByOrderIds(memberIds),
+      this.readHeldByOrderIds(memberIds),
+      this.reworkWaitingOrderIds(
+        tenantId,
+        orders.filter((order) => order.status === ServiceOrderStatus.QUALITY && order.bagClosed).map((order) => order.id),
+      ),
+    ]);
     return orders.map((order) => {
       const members = membersByGroup.get(order.groupId ?? order.id) ?? [order];
       const finance = isCounterFinancialChild(order)
@@ -336,6 +344,7 @@ export class ServiceOrderService {
       return Object.assign(order, {
         hasAttachments: withPhoto.has(order.id),
         payLockedOnParent: osPayLockedOnParent(order),
+        reworkOnBelt: reworkWaitingIds.has(order.id),
         ...finance,
       });
     });
@@ -802,6 +811,9 @@ export class ServiceOrderService {
     if (dto.promisedDeliveryTime !== undefined) {
       serviceOrder.promisedDeliveryTime = normalizeClockTime(dto.promisedDeliveryTime);
     }
+    if (dto.difficultyGrade !== undefined) {
+      serviceOrder.difficultyGrade = this.optionalDifficulty(dto.difficultyGrade);
+    }
     if (shouldRecalculate) {
       const suggestedDelivery = await this.deliveryDateService.suggestDelivery(
         tenantId,
@@ -1122,6 +1134,9 @@ export class ServiceOrderService {
     if (!action) {
       throw new DomainValidationError('Não há próximo passo de produção para esta OS.');
     }
+    if (action === 'pick_up_rework' && !(await this.isReworkWaitingOnBelt(tenantId, serviceOrder.id))) {
+      throw new DomainValidationError('Esta OP ainda está no controle de qualidade.');
+    }
     if (action === 'pick_up' || action === 'pick_up_rework') {
       const busy = await this.serviceOrderRepository.findActiveFloorBags(
         tenantId,
@@ -1157,6 +1172,129 @@ export class ServiceOrderService {
     return this.getDetails(tenantId, saved.id);
   }
 
+  async isReworkWaitingOnBelt(tenantId: string, serviceOrderId: string): Promise<boolean> {
+    const waiting = await this.reworkWaitingOrderIds(tenantId, [serviceOrderId]);
+    return waiting.has(serviceOrderId);
+  }
+
+  async passFinishNames(
+    tenantId: string,
+    serviceOrderId: string,
+    pass: 'production' | 'rework',
+    versionId: string | null,
+  ): Promise<string | null> {
+    if (typeof this.dataSource?.query !== 'function') {
+      return null;
+    }
+    try {
+      const rows = (await this.dataSource.query(
+        `SELECT DISTINCT u.display_name AS name
+           FROM floor_diary_entries d
+           JOIN user_identities u ON u.id = d.user_id
+          WHERE d.tenant_id = $1
+            AND d.service_order_id = $2
+            AND d.action = $3
+            AND (
+              $4::uuid IS NULL
+              OR d.production_order_version_id = $4
+              OR d.production_order_version_id IS NULL
+            )
+          ORDER BY u.display_name`,
+        [tenantId, serviceOrderId, pass === 'rework' ? 'finish_rework' : 'finish_production', versionId],
+      )) as Array<{ name?: string | null }>;
+      const names = [...new Set(rows.map((row) => (row.name ?? '').trim()).filter(Boolean))];
+      return names.length > 0 ? names.join(', ') : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async reworkWaitingOrderIds(tenantId: string, orderIds: string[]): Promise<Set<string>> {
+    const waiting = new Set<string>();
+    if (orderIds.length === 0 || typeof this.dataSource?.query !== 'function') {
+      return waiting;
+    }
+    try {
+      const rows = (await this.dataSource.query(
+        `WITH active AS (
+           SELECT po.service_order_id, v.affected_service_order_item_ids AS items
+             FROM production_orders po
+             JOIN production_order_versions v
+               ON v.production_order_id = po.id
+              AND v.is_active = true
+              AND v.version_reason IN ('rework', 'warranty_execution', 'corrective_production')
+            WHERE po.tenant_id = $1
+              AND po.is_deleted = false
+              AND po.service_order_id = ANY($2::uuid[])
+         ),
+         targets AS (
+           SELECT a.service_order_id, item_id::uuid AS item_id
+             FROM active a
+             CROSS JOIN LATERAL jsonb_array_elements_text(
+               CASE
+                 WHEN a.items IS NULL OR jsonb_typeof(a.items) <> 'array' OR jsonb_array_length(a.items) = 0 THEN (
+                   SELECT COALESCE(jsonb_agg(i.id::text), '[]'::jsonb)
+                     FROM service_order_items i
+                    WHERE i.service_order_id = a.service_order_id
+                      AND i.is_deleted = false
+                 )
+                 ELSE a.items
+               END
+             ) AS item_id
+         )
+         SELECT a.service_order_id AS id
+           FROM active a
+          WHERE EXISTS (SELECT 1 FROM targets t WHERE t.service_order_id = a.service_order_id)
+            AND NOT EXISTS (
+              SELECT 1
+                FROM targets t
+               WHERE t.service_order_id = a.service_order_id
+                 AND COALESCE((
+                   SELECT qr.release_decision
+                     FROM quality_records qr
+                    WHERE qr.service_order_item_id = t.item_id
+                    ORDER BY qr.inspection_at DESC NULLS LAST, qr.created_at DESC
+                    LIMIT 1
+                 ), '') NOT IN ('rejected', 'rework_requested')
+            )`,
+        [tenantId, orderIds],
+      )) as Array<{ id?: string }>;
+      for (const row of rows) {
+        if (row.id) {
+          waiting.add(row.id);
+        }
+      }
+    } catch {
+      return waiting;
+    }
+    return waiting;
+  }
+
+  private async activeReworkVersionId(tenantId: string, serviceOrderId: string): Promise<string | null> {
+    if (typeof this.dataSource?.query !== 'function') {
+      return null;
+    }
+    try {
+      const rows = (await this.dataSource.query(
+        `SELECT v.id
+           FROM production_orders po
+           JOIN production_order_versions v
+             ON v.production_order_id = po.id
+            AND v.is_active = true
+            AND v.version_reason IN ('rework', 'warranty_execution', 'corrective_production')
+          WHERE po.tenant_id = $1
+            AND po.service_order_id = $2
+            AND po.is_deleted = false
+          ORDER BY v.version_no DESC
+          LIMIT 1`,
+        [tenantId, serviceOrderId],
+      )) as Array<{ id?: string }>;
+      return rows[0]?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   private async recordFloorDiary(order: ServiceOrderEntity, actorUserId: string, action: string) {
     if (!['pick_up', 'finish_production', 'pick_up_rework', 'finish_rework'].includes(action)) {
       return;
@@ -1165,10 +1303,15 @@ export class ServiceOrderService {
       return;
     }
     try {
+      const versionId = action === 'pick_up_rework' || action === 'finish_rework'
+        ? await this.activeReworkVersionId(order.tenantId, order.id)
+        : null;
       await this.dataSource.query(
-        `INSERT INTO floor_diary_entries (id, tenant_id, branch_id, user_id, service_order_id, order_no, action, happened_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, now())`,
-        [randomUUID(), order.tenantId, order.branchId, actorUserId, order.id, order.orderNo, action],
+        `INSERT INTO floor_diary_entries (
+           id, tenant_id, branch_id, user_id, service_order_id, order_no, action, happened_at, production_order_version_id
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $8)`,
+        [randomUUID(), order.tenantId, order.branchId, actorUserId, order.id, order.orderNo, action, versionId],
       );
     } catch {
       // O passo da OS já foi gravado. O diário não pode desfazer a sacola.
@@ -1610,7 +1753,7 @@ export class ServiceOrderService {
            FROM floor_diary_entries d
            JOIN user_identities u ON u.id = d.user_id
           WHERE d.tenant_id = $1
-            AND d.action IN ('finish_production', 'finish_rework')
+            AND d.action = 'finish_production'
             AND d.service_order_id IN (
               SELECT so.id
                 FROM service_orders so
@@ -2444,6 +2587,16 @@ export class ServiceOrderService {
     }
 
     return this.formatMoney(Math.max(total, 0));
+  }
+
+  private optionalDifficulty(value: number | null | undefined) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    if (!Number.isInteger(value) || value < 1 || value > 4) {
+      throw new DomainValidationError('O grau de dificuldade fica entre 1 e 4.');
+    }
+    return value;
   }
 
   private formatMoney(value: number): string {

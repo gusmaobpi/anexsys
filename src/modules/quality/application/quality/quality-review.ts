@@ -59,6 +59,32 @@ export function isReworkWaitingReturn(
   });
 }
 
+export function reviewPieceState(
+  latest: QualityRecordLike | undefined,
+  inCurrentRound: boolean,
+  reworkWaitingReturn: boolean,
+  status: string,
+): { decision: QualityPieceDecision; canDecide: boolean } {
+  const returned = reworkWaitingReturn && status === 'awaiting_quality';
+  const state = pieceReviewState(latest, inCurrentRound, reworkWaitingReturn && !returned);
+  if (
+    returned &&
+    inCurrentRound &&
+    (latest?.releaseDecision === 'rejected' || latest?.releaseDecision === 'rework_requested')
+  ) {
+    return { decision: 'pending', canDecide: true };
+  }
+  return state;
+}
+
+export function reviewPhase(status: string, allItemsApproved: boolean, reworkWaitingReturn: boolean): QualityReviewPhase {
+  if (status === 'ready_for_pickup') {
+    return 'ready';
+  }
+  const onBelt = reworkWaitingReturn && status !== 'awaiting_quality';
+  return deriveReviewPhase({ allItemsApproved, reworkWaitingReturn: onBelt });
+}
+
 export function pieceReviewState(
   latest: QualityRecordLike | undefined,
   inCurrentRound: boolean,

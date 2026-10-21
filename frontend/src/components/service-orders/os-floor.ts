@@ -36,6 +36,12 @@ export function floorActionLabel(action: FloorAction) {
   return "Terminei a refação";
 }
 
+export function beltActionLabel(action: FloorAction) {
+  if (action === "pick_up" || action === "pick_up_rework") return "Pegar sacola";
+  if (action === "finish_production" || action === "finish_rework") return "Terminei";
+  return floorActionLabel(action);
+}
+
 export function isProductionFloorAction(action: FloorAction | null): action is Exclude<FloorAction, "open_review"> {
   return action !== null && action !== "open_review";
 }

@@ -8,7 +8,10 @@ export type PickBagRecord = {
   promisedDeliveryDate: string;
   bagClosed?: boolean;
   deliveryType?: string;
+  reworkOnBelt?: boolean;
 };
+
+export type PickBagStep = "pick_up" | "finish_production" | "pick_up_rework" | "finish_rework";
 
 function csvCell(value: string | null | undefined) {
   const text = value ?? "";
@@ -18,8 +21,17 @@ function csvCell(value: string | null | undefined) {
   return text;
 }
 
-export function pickBagAction(row: Pick<PickBagRecord, "status" | "bagClosed">): "pick_up" | "finish_production" | null {
-  const action = productionFloorAction(row.status, Boolean(row.bagClosed));
+export function pickBagAction(row: Pick<PickBagRecord, "status" | "bagClosed" | "reworkOnBelt">): PickBagStep | null {
+  if (!row.bagClosed) {
+    return null;
+  }
+  if (row.status === "quality") {
+    return row.reworkOnBelt ? "pick_up_rework" : null;
+  }
+  if (row.status === "in_rework") {
+    return "finish_rework";
+  }
+  const action = productionFloorAction(row.status, true);
   if (action === "pick_up" || action === "finish_production") {
     return action;
   }

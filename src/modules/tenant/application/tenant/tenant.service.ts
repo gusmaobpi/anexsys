@@ -40,6 +40,11 @@ export class TenantService {
         warrantyExecutionPeriodDays: dto.warrantyExecutionPeriodDays ?? 90,
         blockDeliveryWithOutstandingBalance: dto.blockDeliveryWithOutstandingBalance ?? true,
         machineWaitMinutes: 3,
+        delayAlertLeadHours: dto.delayAlertLeadHours === undefined ? 2 : this.requireLeadHours(dto.delayAlertLeadHours),
+        grade1Minutes: dto.grade1Minutes === undefined ? 30 : this.requireGradeMinutes(dto.grade1Minutes, 'Grau 1'),
+        grade2Minutes: dto.grade2Minutes === undefined ? 60 : this.requireGradeMinutes(dto.grade2Minutes, 'Grau 2'),
+        grade3Minutes: dto.grade3Minutes === undefined ? 90 : this.requireGradeMinutes(dto.grade3Minutes, 'Grau 3'),
+        grade4Minutes: dto.grade4Minutes === undefined ? 180 : this.requireGradeMinutes(dto.grade4Minutes, 'Grau 4'),
         maxPiecesPerBag: 5,
         isDeleted: false,
         deletedAt: null,
@@ -101,6 +106,13 @@ export class TenantService {
     if (dto.blockDeliveryWithOutstandingBalance !== undefined) {
       tenant.blockDeliveryWithOutstandingBalance = dto.blockDeliveryWithOutstandingBalance;
     }
+    if (dto.delayAlertLeadHours !== undefined) {
+      tenant.delayAlertLeadHours = this.requireLeadHours(dto.delayAlertLeadHours);
+    }
+    if (dto.grade1Minutes !== undefined) tenant.grade1Minutes = this.requireGradeMinutes(dto.grade1Minutes, 'Grau 1');
+    if (dto.grade2Minutes !== undefined) tenant.grade2Minutes = this.requireGradeMinutes(dto.grade2Minutes, 'Grau 2');
+    if (dto.grade3Minutes !== undefined) tenant.grade3Minutes = this.requireGradeMinutes(dto.grade3Minutes, 'Grau 3');
+    if (dto.grade4Minutes !== undefined) tenant.grade4Minutes = this.requireGradeMinutes(dto.grade4Minutes, 'Grau 4');
     tenant.updatedBy = dto.actorUserId;
 
     const saved = await this.tenantRepository.save(tenant);
@@ -115,6 +127,11 @@ export class TenantService {
         warrantyAdjustmentPeriodDays: saved.warrantyAdjustmentPeriodDays,
         warrantyExecutionPeriodDays: saved.warrantyExecutionPeriodDays,
         blockDeliveryWithOutstandingBalance: saved.blockDeliveryWithOutstandingBalance,
+        delayAlertLeadHours: saved.delayAlertLeadHours,
+        grade1Minutes: saved.grade1Minutes,
+        grade2Minutes: saved.grade2Minutes,
+        grade3Minutes: saved.grade3Minutes,
+        grade4Minutes: saved.grade4Minutes,
       },
       previousValues,
       newValues: this.buildAuditSnapshot(saved),
@@ -161,6 +178,20 @@ export class TenantService {
     return saved;
   }
 
+  private requireLeadHours(value: number) {
+    if (!Number.isInteger(value) || value < 1 || value > 48) {
+      throw new DomainValidationError('O alerta de atraso fica entre 1 e 48 horas.');
+    }
+    return value;
+  }
+
+  private requireGradeMinutes(value: number, label: string) {
+    if (!Number.isInteger(value) || value < 1 || value > 1440) {
+      throw new DomainValidationError(`${label} fica entre 1 e 1440 minutos.`);
+    }
+    return value;
+  }
+
   private buildAuditSnapshot(tenant: TenantEntity) {
     return {
       code: tenant.code,
@@ -171,6 +202,11 @@ export class TenantService {
       warrantyExecutionPeriodDays: tenant.warrantyExecutionPeriodDays,
       blockDeliveryWithOutstandingBalance: tenant.blockDeliveryWithOutstandingBalance,
       machineWaitMinutes: tenant.machineWaitMinutes,
+      delayAlertLeadHours: tenant.delayAlertLeadHours,
+      grade1Minutes: tenant.grade1Minutes,
+      grade2Minutes: tenant.grade2Minutes,
+      grade3Minutes: tenant.grade3Minutes,
+      grade4Minutes: tenant.grade4Minutes,
       maxPiecesPerBag: tenant.maxPiecesPerBag,
     };
   }

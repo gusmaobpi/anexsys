@@ -12,7 +12,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, Length, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { CurrentRequest, CurrentTenantId } from 'src/platform/http/request-context.decorators';
 import { Permissions } from 'src/platform/auth/permissions.decorator';
 import { PlatformRequest } from 'src/platform/http/request-context';
@@ -47,6 +47,41 @@ class CreateTenantBody {
   @IsOptional()
   @IsBoolean()
   blockDeliveryWithOutstandingBalance?: boolean;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(48)
+  delayAlertLeadHours?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade1Minutes?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade2Minutes?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade3Minutes?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade4Minutes?: number;
 
   @IsOptional()
   @IsString()
@@ -83,6 +118,41 @@ class UpdateTenantBody {
   @IsOptional()
   @IsBoolean()
   blockDeliveryWithOutstandingBalance?: boolean;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(48)
+  delayAlertLeadHours?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade1Minutes?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade2Minutes?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade3Minutes?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  grade4Minutes?: number;
 }
 
 @Controller('tenants')
