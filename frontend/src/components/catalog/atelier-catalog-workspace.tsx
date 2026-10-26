@@ -447,6 +447,11 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
       {isListWorkspace ? (
         <CadastroListPanel
           applyFilters={applyAtelierCatalogFilters}
+          importActions={[{ kind: mode === "products" ? "products" : "services" }]}
+          onImported={async (message) => {
+            setMessage(message);
+            await loadRecords();
+          }}
           buildExcelCsv={(rows) => buildAtelierCatalogExcelCsv(rows)}
           canInactivate={(row) => row.status !== "inactive"}
           canWrite={canWrite}

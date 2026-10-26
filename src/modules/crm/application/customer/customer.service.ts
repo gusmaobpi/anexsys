@@ -129,7 +129,7 @@ export class CustomerService {
 
     const previousStatus = customer.status;
     if (dto.status === CustomerStatus.BLOCKED) {
-      throw new DomainValidationError('Blocked status management is outside Sprint 2 scope.');
+      throw new DomainValidationError('A gestão de cliente bloqueado ainda não está disponível nesta tela.');
     }
 
     if (dto.customerType) {
@@ -162,7 +162,7 @@ export class CustomerService {
 
     if (dto.postalCode !== undefined) {
       if (dto.postalCode === null) {
-        throw new DomainValidationError('Postal code is required.');
+        throw new DomainValidationError('O CEP é obrigatório.');
       }
       customer.postalCode = this.normalizePostalCode(dto.postalCode);
     }
@@ -327,7 +327,7 @@ export class CustomerService {
   private normalizePhone(value: string): string {
     const normalized = value.replace(/\D/g, '');
     if (normalized.length < 10 || normalized.length > 13) {
-      throw new DomainValidationError('Customer mobile phone / WhatsApp with DDD is required.');
+      throw new DomainValidationError('O celular / WhatsApp com DDD é obrigatório.');
     }
 
     return normalized;
@@ -349,19 +349,19 @@ export class CustomerService {
     const normalized = value.replace(/\D/g, '');
     if (customerType === CustomerType.COMPANY) {
       if (normalized.length !== 14) {
-        throw new DomainValidationError('Company customers must use a 14-digit CNPJ.');
+        throw new DomainValidationError('Cliente empresa precisa de CNPJ com 14 dígitos.');
       }
       if (!this.isValidCnpj(normalized)) {
-        throw new DomainValidationError('Company customers must use a valid CNPJ.');
+        throw new DomainValidationError('O CNPJ informado não é válido.');
       }
       return normalized;
     }
 
     if (normalized.length !== 11) {
-      throw new DomainValidationError('Person customers must use an 11-digit CPF.');
+      throw new DomainValidationError('Cliente pessoa precisa de CPF com 11 dígitos.');
     }
     if (!this.isValidCpf(normalized)) {
-      throw new DomainValidationError('Person customers must use a valid CPF.');
+      throw new DomainValidationError('O CPF informado não é válido.');
     }
 
     return normalized;
@@ -374,7 +374,7 @@ export class CustomerService {
 
     const normalized = value.replace(/\D/g, '');
     if (normalized.length !== 8) {
-      throw new DomainValidationError('Postal code must contain 8 digits.');
+      throw new DomainValidationError('O CEP precisa ter 8 dígitos.');
     }
 
     return normalized;
@@ -418,10 +418,10 @@ export class CustomerService {
 
     const birthDate = new Date(value);
     if (Number.isNaN(birthDate.getTime())) {
-      throw new DomainValidationError('Birth date is invalid.');
+      throw new DomainValidationError('A data de nascimento é inválida.');
     }
     if (birthDate.getTime() > Date.now()) {
-      throw new DomainValidationError('Birth date cannot be in the future.');
+      throw new DomainValidationError('A data de nascimento não pode ser no futuro.');
     }
 
     return value;
@@ -429,51 +429,51 @@ export class CustomerService {
 
   private normalizeAddress(input: Pick<CreateCustomerDto, 'street' | 'number' | 'complement' | 'district' | 'city' | 'state' | 'country'>) {
     return {
-      street: this.normalizeRequiredAddressField(input.street, 'Street'),
-      number: this.normalizeRequiredAddressField(input.number, 'Number'),
+      street: this.normalizeRequiredAddressField(input.street, 'A rua é obrigatória.'),
+      number: this.normalizeRequiredAddressField(input.number, 'O número é obrigatório.'),
       complement: this.normalizeOptionalAddressField(input.complement),
-      district: this.normalizeRequiredAddressField(input.district, 'District'),
-      city: this.normalizeRequiredAddressField(input.city, 'City'),
-      state: this.normalizeRequiredAddressField(input.state, 'State'),
-      country: this.normalizeRequiredAddressField(input.country, 'Country'),
+      district: this.normalizeRequiredAddressField(input.district, 'O bairro é obrigatório.'),
+      city: this.normalizeRequiredAddressField(input.city, 'A cidade é obrigatória.'),
+      state: this.normalizeRequiredAddressField(input.state, 'O estado é obrigatório.'),
+      country: this.normalizeRequiredAddressField(input.country, 'O país é obrigatório.'),
     };
   }
 
   private applyAddressUpdates(customer: CustomerEntity, dto: UpdateCustomerDto): void {
     if (dto.street !== undefined) {
-      customer.street = this.normalizeUpdatedAddressField(dto.street, 'Street');
+      customer.street = this.normalizeUpdatedAddressField(dto.street, 'A rua é obrigatória.');
     }
     if (dto.number !== undefined) {
-      customer.number = this.normalizeUpdatedAddressField(dto.number, 'Number');
+      customer.number = this.normalizeUpdatedAddressField(dto.number, 'O número é obrigatório.');
     }
     if (dto.complement !== undefined) {
       customer.complement = this.normalizeOptionalAddressField(dto.complement);
     }
     if (dto.district !== undefined) {
-      customer.district = this.normalizeUpdatedAddressField(dto.district, 'District');
+      customer.district = this.normalizeUpdatedAddressField(dto.district, 'O bairro é obrigatório.');
     }
     if (dto.city !== undefined) {
-      customer.city = this.normalizeUpdatedAddressField(dto.city, 'City');
+      customer.city = this.normalizeUpdatedAddressField(dto.city, 'A cidade é obrigatória.');
     }
     if (dto.state !== undefined) {
-      customer.state = this.normalizeUpdatedAddressField(dto.state, 'State');
+      customer.state = this.normalizeUpdatedAddressField(dto.state, 'O estado é obrigatório.');
     }
     if (dto.country !== undefined) {
-      customer.country = this.normalizeUpdatedAddressField(dto.country, 'Country');
+      customer.country = this.normalizeUpdatedAddressField(dto.country, 'O país é obrigatório.');
     }
   }
 
   private normalizeRequiredAddressField(value: string | null | undefined, label: string): string {
     const normalized = value?.trim();
     if (!normalized) {
-      throw new DomainValidationError(`${label} is required.`);
+      throw new DomainValidationError(label);
     }
     return normalized;
   }
 
   private normalizeUpdatedAddressField(value: string | null | undefined, label: string): string {
     if (value == null) {
-      throw new DomainValidationError(`${label} is required.`);
+      throw new DomainValidationError(label);
     }
     return this.normalizeRequiredAddressField(value, label);
   }
@@ -490,7 +490,7 @@ export class CustomerService {
 
     const existingCustomer = await this.customerRepository.findByTenantAndDocument(tenantId, cpfCnpj);
     if (existingCustomer && existingCustomer.id !== currentCustomerId) {
-      throw new DomainValidationError('Another customer with the same CPF/CNPJ already exists in the tenant.');
+      throw new DomainValidationError('Já existe outro cliente com este CPF ou CNPJ nesta conta.');
     }
   }
 

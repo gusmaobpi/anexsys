@@ -25,8 +25,8 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
         <div className="sidebar__pinned">
           <div className="sidebar__brand">
             <div className="eyebrow">ANEXSYS</div>
-            <h1>Administrative Portal</h1>
-            <p>Fast access to your company, filial, and daily administrative work.</p>
+            <h1>Portal administrativo</h1>
+            <p>Acesso rápido à conta, à filial e ao trabalho do dia.</p>
           </div>
 
           <ActiveContextCombos />
@@ -47,11 +47,11 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
                 {sidebarVisible ? "Fechar menu" : "Abrir menu"}
               </button>
             ) : null}
-            <div className="eyebrow">Authenticated session</div>
-            <h2>{session?.user?.displayName ?? "Authenticated user"}</h2>
+            <div className="eyebrow">Sessão autenticada</div>
+            <h2>{session?.user?.displayName ?? "Usuário autenticado"}</h2>
             <div className="topbar__meta">
               <span className="pill">
-                Permissions <strong>{session?.permissions.length ?? 0}</strong>
+                Permissões <strong>{session?.permissions.length ?? 0}</strong>
               </span>
             </div>
           </div>
@@ -60,7 +60,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
 
           <div className="topbar__actions">
             <button className="button-secondary" onClick={() => void logout()} type="button">
-              Logout
+              Sair
             </button>
           </div>
         </header>
@@ -70,10 +70,10 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
         <main className="workspace__content">
           {errorMessage ? (
             <div className="error-banner">
-              <strong>Session notice</strong>
+              <strong>Aviso da sessão</strong>
               <span>{errorMessage}</span>
               <button className="button-ghost" onClick={clearError} type="button">
-                Dismiss
+                Fechar
               </button>
             </div>
           ) : null}

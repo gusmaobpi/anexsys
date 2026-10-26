@@ -199,7 +199,7 @@ export class MeasurementService {
 
   private async normalizeItems(dto: CreateMeasurementRecordDto): Promise<Array<{ bodyPart: MeasurementBodyPartEntity; unit: MeasurementUnitEntity; value: number; notes: string | null }>> {
     if (dto.items.length === 0) {
-      throw new DomainValidationError('At least one measurement item must be provided.');
+      throw new DomainValidationError('Inclua ao menos uma medida.');
     }
 
     const duplicateBodyParts = new Set<string>();
@@ -211,7 +211,7 @@ export class MeasurementService {
       seenBodyParts.add(item.bodyPartId);
     }
     if (duplicateBodyParts.size > 0) {
-      throw new DomainValidationError('A Measurement Set cannot contain duplicate body parts.');
+      throw new DomainValidationError('O conjunto de medidas não pode repetir a mesma parte do corpo.');
     }
 
     const bodyParts = await this.measurementCatalogService.resolveBodyParts(
@@ -229,11 +229,11 @@ export class MeasurementService {
     return dto.items.map((item) => {
       const bodyPart = bodyPartById.get(item.bodyPartId);
       if (!bodyPart) {
-        throw new DomainValidationError('Invalid body part supplied.');
+        throw new DomainValidationError('A parte do corpo informada não é válida.');
       }
       const unit = item.unitId ? unitById.get(item.unitId) : defaultUnit;
       if (!unit) {
-        throw new DomainValidationError('Invalid measurement unit supplied.');
+        throw new DomainValidationError('A unidade de medida informada não é válida.');
       }
       return {
         bodyPart,

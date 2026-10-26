@@ -75,17 +75,17 @@ export function MasterDataDuplicateGuard({
         <div className="button-row" style={{ marginTop: 12 }}>
           {onView ? (
             <button className="button-secondary" onClick={onView} type="button">
-              View
+              Ver
             </button>
           ) : null}
           {onEdit ? (
             <button className="button-secondary" onClick={onEdit} type="button">
-              Edit
+              Alterar
             </button>
           ) : null}
           {onCancel ? (
             <button className="button-secondary" onClick={onCancel} type="button">
-              Cancel
+              Cancelar
             </button>
           ) : null}
         </div>

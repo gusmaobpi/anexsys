@@ -1103,7 +1103,7 @@ export function AccessWorkspace() {
     return (
       <section className="mini-card">
         <h3>Usuários e acessos indisponíveis</h3>
-        <p>Você não possui acesso a este workspace no contexto atual.</p>
+        <p>Você não possui acesso a esta tela no contexto atual.</p>
       </section>
     );
   }
@@ -1240,7 +1240,7 @@ export function AccessWorkspace() {
                     <strong>{activeUser.status}</strong>
                   </div>
                   <div className="detail-field">
-                    <span>Email</span>
+                    <span>E-mail</span>
                     <strong>{activeUser.email}</strong>
                   </div>
                   <div className="detail-field">
@@ -1420,6 +1420,11 @@ export function AccessWorkspace() {
       ) : isListWorkspace && listTab === "users" ? (
         <CadastroListPanel
           applyFilters={applyAccessUserListFilters}
+          importActions={[{ kind: "users" }]}
+          onImported={async (message) => {
+            setMessage(message);
+            await loadWorkspace();
+          }}
           buildEmailCsv={buildAccessUserEmailCsv}
           buildExcelCsv={buildAccessUserExcelCsv}
           canInactivate={(row) => row.status !== "inactive" && !row.isMaster}

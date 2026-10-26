@@ -9,6 +9,7 @@ import {
 } from "@/components/customers/customer-list";
 import { SearchAutocomplete } from "@/components/ui/search-autocomplete";
 import type { SmartLookupOption } from "@/components/ui/lookup-suggestions";
+import { useImportCadastros, type ImportKind } from "@/components/integration/import-cadastros-menu";
 import { RowOverflowMenu, type RowMenuItem } from "@/components/ui/row-overflow-menu";
 
 const PAGE_SIZES = CUSTOMER_LIST_PAGE_SIZES;
@@ -96,6 +97,8 @@ type CadastroListPanelProps<T extends { id: string }> = {
   rowMenu?: (row: T) => RowMenuItem[];
   excelFileName: string;
   buildExcelCsv: (rows: T[]) => string;
+  importActions?: Array<{ kind: ImportKind; label?: string }>;
+  onImported?: (message: string) => void | Promise<void>;
   emailFileName?: string;
   buildEmailCsv?: (rows: T[]) => string;
   emptyMessage: string;
@@ -131,6 +134,8 @@ export function CadastroListPanel<T extends { id: string }>({
   rowMenu,
   excelFileName,
   buildExcelCsv,
+  importActions,
+  onImported,
   emailFileName,
   buildEmailCsv,
   emptyMessage,
@@ -147,6 +152,11 @@ export function CadastroListPanel<T extends { id: string }>({
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZES)[number]>(10);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const importKinds = importActions?.map((action) => action.kind) ?? [];
+  const importer = useImportCadastros(async (message) => {
+    setOpenMenu(null);
+    await onImported?.(message);
+  }, importKinds);
 
   const visibleColumns = useMemo(
     () => columns.filter((column) => visibleColumnIds.includes(column.id)),
@@ -214,6 +224,8 @@ export function CadastroListPanel<T extends { id: string }>({
       <h2 className="cadastro-list__title">{title}</h2>
 
       <div className="cadastro-toolbar" ref={toolbarRef}>
+        {importer.input}
+        {importer.panel}
         <div className="cadastro-toolbar__left">
           {canWrite && !hideCreate ? (
             <button className="button" onClick={() => onCreate()} type="button">
@@ -253,6 +265,30 @@ export function CadastroListPanel<T extends { id: string }>({
                       type="button"
                     >
                       Exportar e-mails
+                    </button>
+                  </li>
+                ) : null}
+                {canWrite
+                  ? importActions?.map((action) => (
+                  <li key={action.kind}>
+                    <button disabled={importer.pending} onClick={() => importer.open(action.kind)} type="button">
+                      {importer.pending && importer.activeKind === action.kind
+                        ? "Preparando…"
+                        : action.label ?? "Importar Cadastros"}
+                    </button>
+                  </li>
+                ))
+                  : null}
+                {canWrite && importKinds.length > 0 ? (
+                  <li>
+                    <button
+                      onClick={() => {
+                        setOpenMenu(null);
+                        importer.openResults();
+                      }}
+                      type="button"
+                    >
+                      Resultados da integração
                     </button>
                   </li>
                 ) : null}

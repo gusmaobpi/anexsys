@@ -24,6 +24,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { FloorScheduleModule } from './modules/floor-schedule/floor-schedule.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { EmailModule } from './modules/email/email.module';
+import { IntegrationModule } from './modules/integration/integration.module';
 import { FiscalModule } from './modules/fiscal/fiscal.module';
 import { CustodyModule } from './modules/custody/custody.module';
 import { JwtAuthGuard } from './platform/auth/jwt-auth.guard';
@@ -59,6 +60,7 @@ import { patchPostgresQueryRunnerForRls } from './platform/tenancy/tenant-rls.pa
     DashboardModule,
     WhatsappModule,
     EmailModule,
+    IntegrationModule,
     FiscalModule,
     CustodyModule,
     PickupModule,

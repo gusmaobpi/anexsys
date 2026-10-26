@@ -24,6 +24,8 @@ import { ServiceOrdersWorkspace } from "@/components/service-orders/service-orde
 import { PaymentProvidersWorkspace } from "@/components/settings/payment-providers-workspace";
 import { PaymentTerminalsWorkspace } from "@/components/settings/payment-terminals-workspace";
 import { WhatsappNoticesWorkspace } from "@/components/settings/whatsapp-notices-workspace";
+import { IntegrationLayoutWorkspace } from "@/components/integration/integration-layout-workspace";
+import { INTEGRATION_LAYOUTS, INTEGRATION_ORDER_HREF } from "@/components/integration/migration-layouts";
 import { EmailSettingsWorkspace } from "@/components/settings/email-settings-workspace";
 import { WhatsappSettingsWorkspace } from "@/components/settings/whatsapp-settings-workspace";
 
@@ -88,6 +90,8 @@ const workspaceScreens: Record<string, ComponentType> = {
   "/floor-schedule": FloorGradeWorkspace,
   "/floor-today": FloorTodayWorkspace,
   "/quality": QualityWorkspace,
+  [INTEGRATION_ORDER_HREF]: IntegrationLayoutWorkspace,
+  ...Object.fromEntries(INTEGRATION_LAYOUTS.map((layout) => [layout.href, IntegrationLayoutWorkspace])),
 };
 
 export function resolveWorkspaceScreen(pathname: string): ComponentType | null {

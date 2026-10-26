@@ -172,7 +172,7 @@ async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
   const payload = parsePayload(text);
 
   if (!response.ok) {
-    throw new HttpError(response.status, getErrorMessage(payload, "Request failed."));
+    throw new HttpError(response.status, getErrorMessage(payload, "Não foi possível concluir a solicitação."));
   }
 
   return payload as T;
@@ -352,7 +352,7 @@ async function authenticatedRequest<T>(
       continue;
     }
 
-    throw new HttpError(response.status, getErrorMessage(payload, "Authenticated request failed."));
+    throw new HttpError(response.status, getErrorMessage(payload, "Não foi possível concluir a solicitação autenticada."));
   }
 
   throw new HttpError(401, SESSION_EXPIRED_MESSAGE);

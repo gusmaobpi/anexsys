@@ -26,7 +26,7 @@ export class DomainExceptionFilter implements ExceptionFilter {
         return;
       }
       const friendlyMessage = this.getFriendlyHttpMessage(status, exception.getResponse(), request);
-      response.status(status).json(friendlyMessage ? { message: friendlyMessage } : exception.getResponse());
+      response.status(status).json(friendlyMessage ? { message: friendlyMessage } : this.localizePayload(exception.getResponse()));
       return;
     }
 
@@ -36,22 +36,22 @@ export class DomainExceptionFilter implements ExceptionFilter {
     }
 
     if (exception instanceof DomainValidationError || exception instanceof BadRequestException) {
-      response.status(HttpStatus.BAD_REQUEST).json({ message: exception.message });
+      response.status(HttpStatus.BAD_REQUEST).json({ message: this.localize(exception.message) });
       return;
     }
 
     if (exception instanceof EntityNotFoundError || exception instanceof NotFoundException) {
-      response.status(HttpStatus.NOT_FOUND).json({ message: exception.message });
+      response.status(HttpStatus.NOT_FOUND).json({ message: this.localize(exception.message) });
       return;
     }
 
     if (exception instanceof AuthenticationFailedError || exception instanceof UnauthorizedException) {
-      response.status(HttpStatus.UNAUTHORIZED).json({ message: exception.message });
+      response.status(HttpStatus.UNAUTHORIZED).json({ message: this.localize(exception.message) });
       return;
     }
 
     if (exception instanceof ForbiddenException) {
-      response.status(HttpStatus.FORBIDDEN).json({ message: exception.message });
+      response.status(HttpStatus.FORBIDDEN).json({ message: this.localize(exception.message) });
       return;
     }
 
@@ -68,7 +68,64 @@ export class DomainExceptionFilter implements ExceptionFilter {
     if (/coluna .+ não existe|column .+ does not exist/i.test(raw)) {
       return 'O banco local está incompleto. No VS Code, no terminal do start:dev, aperte Ctrl+C e rode npm run start:dev de novo.';
     }
-    return raw || 'Internal server error';
+    return this.localize(raw) || 'Erro interno do servidor.';
+  }
+
+  private localizePayload(payload: unknown): unknown {
+    if (typeof payload === 'string') return this.localize(payload);
+    if (!payload || typeof payload !== 'object' || !('message' in payload)) return payload;
+    const message = (payload as { message?: unknown }).message;
+    if (typeof message === 'string') return { ...payload, message: this.localize(message) };
+    if (Array.isArray(message)) {
+      return { ...payload, message: message.map((item) => (typeof item === 'string' ? this.localize(item) : item)) };
+    }
+    return payload;
+  }
+
+  private localize(message: string): string {
+    const exact: Record<string, string> = {
+      'Authenticated tenant context is required.': 'É preciso estar autenticado na conta.',
+      'Authenticated user is required.': 'É preciso estar autenticado.',
+      'Authenticated session is required.': 'É preciso estar com a sessão ativa.',
+      'Authenticated permission context is required.': 'É preciso estar autenticado para verificar a permissão.',
+      'Authorization bearer token is required.': 'É preciso enviar o token de acesso.',
+      'Tenant context is required.': 'É preciso selecionar a conta.',
+      'Branch context is required.': 'É preciso selecionar a filial.',
+      'Requested branch is outside the authenticated branch scope.': 'A filial pedida está fora do seu acesso.',
+      'Requested branch is outside the authenticated tenant scope.': 'A filial pedida está fora da conta autenticada.',
+      'Requested branch is outside the authenticated access scope.': 'A filial pedida está fora do seu acesso.',
+      'Requested user is outside the authenticated tenant scope.': 'Este usuário está fora da conta autenticada.',
+      'Requested community is outside the authenticated tenant scope.': 'Esta comunidade está fora da conta autenticada.',
+      'Requested permission is outside the authenticated tenant scope.': 'Esta permissão está fora da conta autenticada.',
+      'Requested role is outside the authenticated tenant scope.': 'Este papel está fora da conta autenticada.',
+      'Requested tenant is outside the authenticated tenant scope.': 'Esta conta está fora do acesso autenticado.',
+      'Requested company is outside the authenticated access scope.': 'A empresa pedida está fora do seu acesso.',
+      'Requested service order is outside the authenticated branch scope.': 'Esta ordem de serviço está fora da filial autenticada.',
+      'Requested production order is outside the authenticated branch scope.': 'Esta ordem de produção está fora da filial autenticada.',
+      'Requested operational resource is outside the authenticated branch scope.': 'Este recurso está fora da filial autenticada.',
+      'Authenticated user is outside the tenant scope.': 'O usuário autenticado está fora da conta.',
+      'User is outside the tenant scope.': 'Este usuário está fora da conta.',
+      'Role is outside the tenant scope.': 'Este papel está fora da conta.',
+      'Permission is outside the tenant scope.': 'Esta permissão está fora da conta.',
+      'Community is outside the tenant scope.': 'Esta comunidade está fora da conta.',
+      'Portal user is outside the tenant scope.': 'Este usuário do portal está fora da conta.',
+      'Branch must belong to the same tenant.': 'A filial precisa pertencer à mesma conta.',
+      'Internal server error': 'Erro interno do servidor.',
+      'Bad Request': 'Solicitação inválida.',
+      'Unauthorized': 'Não autorizado.',
+      'Forbidden': 'Sem permissão.',
+      'Not Found': 'Não encontrado.',
+    };
+    const known = exact[message];
+    if (known) return known;
+    const permission = message.match(/^Missing required permission '(.+)'\.$/);
+    if (permission) return `Falta a permissão '${permission[1]}'.`;
+    const action = message.match(/^Unsupported dependency validation action '(.+)'\.$/);
+    if (action) return `Ação de validação desconhecida: '${action[1]}'.`;
+    if (/ was not found\.$/.test(message)) return 'O registro pedido não foi encontrado.';
+    if (/ is outside the /.test(message)) return 'Este registro está fora do seu acesso.';
+    if (/outside the allowed warranty period/.test(message)) return 'Este caso está fora do prazo de garantia.';
+    return message;
   }
 
   private getFriendlyHttpMessage(
@@ -86,10 +143,10 @@ export class DomainExceptionFilter implements ExceptionFilter {
     }
 
     if (request?.method === 'POST' && request.url?.includes('/customers')) {
-      return 'Customer could not be saved. Some registration fields are missing or invalid. Review name, contact, address, and document information, then try again.';
+      return 'Não foi possível gravar o cliente. Algum campo do cadastro está faltando ou inválido. Revise nome, contato, endereço e documento e tente de novo.';
     }
 
-    return 'The request could not be completed. Some informed fields are missing or invalid. Review the data and try again.';
+    return 'Não foi possível concluir a solicitação. Algum campo informado está faltando ou inválido. Revise os dados e tente de novo.';
   }
 
   private photoTooLargeMessage() {

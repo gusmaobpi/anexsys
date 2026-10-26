@@ -241,7 +241,7 @@ function mapCustomerToForm(customer: CustomerRecord): CustomerFormState {
 
 function formatCustomerSaveError(error: unknown) {
   const fallback =
-    "Customer could not be saved. Some registration fields are missing or invalid. Review name, contact, address, and document information, then try again.";
+    "Não foi possível gravar o cliente. Algum campo do cadastro está faltando ou inválido. Revise nome, contato, endereço e documento e tente de novo.";
   if (!(error instanceof Error)) {
     return fallback;
   }
@@ -334,7 +334,7 @@ export function CustomerWorkspace() {
   const { closeWorkspace } = useWorkspaceManager();
   const { currentTabId, navigateWithinWorkspace, openWorkspaceInNewTab } = useWorkspaceRegistration({
     label: showCreateForm ? "Cliente: Novo" : selectedCustomer ? `Cliente: ${selectedCustomer.legalName}` : "Clientes",
-    subtitle: showCreateForm ? "Novo cadastro" : focusSection === "measurements" && selectedCustomer ? "Measurements" : selectedCustomer?.cpfCnpj ?? null,
+    subtitle: showCreateForm ? "Novo cadastro" : focusSection === "measurements" && selectedCustomer ? "Medidas" : selectedCustomer?.cpfCnpj ?? null,
   });
   const isFormWorkspace = workspaceMode === "new" || Boolean(focusCustomerId);
   const isListWorkspace = !isFormWorkspace;
@@ -401,7 +401,7 @@ export function CustomerWorkspace() {
           navigateWithinWorkspace(`/customers?${params.toString()}`);
         }
       } catch (error) {
-        setDetailError(error instanceof Error ? error.message : "Customer details could not be loaded.");
+        setDetailError(error instanceof Error ? error.message : "Não foi possível carregar os dados do cliente.");
       } finally {
         setDetailLoading(false);
       }
@@ -664,7 +664,7 @@ export function CustomerWorkspace() {
     try {
       const response = await fetch(`https://viacep.com.br/ws/${postalCode}/json/`);
       if (!response.ok) {
-        throw new Error("Postal code lookup failed.");
+        throw new Error("Não foi possível consultar o CEP.");
       }
 
       const data = (await response.json()) as {
@@ -677,7 +677,7 @@ export function CustomerWorkspace() {
       };
 
       if (data.erro) {
-        throw new Error("Postal code not found.");
+        throw new Error("CEP não encontrado.");
       }
 
       setCustomerForm((current) => ({
@@ -692,7 +692,7 @@ export function CustomerWorkspace() {
       }));
       setWorkspaceMessage(null);
     } catch (error) {
-      setWorkspaceMessage(error instanceof Error ? error.message : "Postal code lookup could not be completed.");
+      setWorkspaceMessage(error instanceof Error ? error.message : "Não foi possível concluir a consulta do CEP.");
     } finally {
       setLookingUpPostalCode(false);
     }
@@ -833,7 +833,7 @@ export function CustomerWorkspace() {
       setWorkspaceMessage("Cliente gravado.");
       finishCustomerSave(intent);
     } catch (error) {
-      setWorkspaceMessage(error instanceof Error ? error.message : "Customer could not be updated.");
+      setWorkspaceMessage(error instanceof Error ? error.message : "Não foi possível atualizar o cliente.");
     } finally {
       setSavingCustomer(false);
     }
@@ -856,7 +856,7 @@ export function CustomerWorkspace() {
         }));
 
       if (items.length === 0) {
-        throw new Error("Add at least one valid measurement item before saving the Measurement Set.");
+        throw new Error("Inclua ao menos uma medida válida antes de gravar o conjunto.");
       }
 
       await apiJson<MeasurementSet>(`/customers/${selectedCustomer.id}/measurements`, {
@@ -867,11 +867,11 @@ export function CustomerWorkspace() {
           items,
         }),
       });
-      setWorkspaceMessage("Measurement set recorded successfully.");
+      setWorkspaceMessage("Conjunto de medidas gravado.");
       resetMeasurementForm();
       await loadCustomerDetails(selectedCustomer.id);
     } catch (error) {
-      setWorkspaceMessage(error instanceof Error ? error.message : "Measurements could not be recorded.");
+      setWorkspaceMessage(error instanceof Error ? error.message : "Não foi possível gravar as medidas.");
     } finally {
       setSavingMeasurements(false);
     }
@@ -892,7 +892,7 @@ export function CustomerWorkspace() {
         <section className="hero-card">
           <div className="eyebrow">Módulo operacional</div>
           <h1 className="title">Cadastro de clientes</h1>
-          <p>Cadastre clientes do tenant, pesquise rapidamente, edite dados cadastrais completos e mantenha Measurement Sets versionados com partes do corpo e unidades padronizadas.</p>
+          <p>Cadastre os clientes da conta, pesquise rápido, edite o cadastro completo e mantenha os conjuntos de medidas versionados, com partes do corpo e unidades padronizadas.</p>
         </section>
       ) : null}
 
@@ -926,6 +926,10 @@ export function CustomerWorkspace() {
             const customer = customers.find((item) => item.id === row.id);
             if (customer) void handleInactivateCustomer(customer);
           }}
+          onImported={async (message) => {
+            setWorkspaceMessage(message);
+            await loadCustomers();
+          }}
         />
       ) : null}
 
@@ -934,7 +938,7 @@ export function CustomerWorkspace() {
           {showCreateForm ? (
             <article className="mini-card cadastro-form">
               <h3>Novo cliente</h3>
-              <p className="subtitle">Cadastre o cliente uma única vez no tenant e mantenha o endereço completo para uso operacional futuro.</p>
+              <p className="subtitle">Cadastre o cliente uma única vez na conta e mantenha o endereço completo para o uso do dia a dia.</p>
               <form className="form-grid" onSubmit={handleCreateCustomer}>
                 <CustomerFields
                   duplicateGuard={
@@ -996,7 +1000,7 @@ export function CustomerWorkspace() {
                     {savingCustomer ? "Gravando…" : "Gravar e Continuar"}
                   </button>
                   <button className="button-secondary" onClick={closeCustomerWorkspace} type="button">
-                    Close
+                    Fechar
                   </button>
                 </div>
               </form>
@@ -1008,7 +1012,7 @@ export function CustomerWorkspace() {
               <div className="workspace-toolbar">
                 <div className="workspace-toolbar__copy">
                   <h3>Detalhes do cliente</h3>
-                  <p>{selectedCustomer ? "Revise cadastro, histórico e Measurement Sets versionados." : "Selecione um cliente na grade."}</p>
+                  <p>{selectedCustomer ? "Revise o cadastro, o histórico e os conjuntos de medidas." : "Selecione um cliente na grade."}</p>
                 </div>
               </div>
 
@@ -1023,7 +1027,9 @@ export function CustomerWorkspace() {
                       <h2>{selectedCustomer.legalName}</h2>
                       <p className="subtitle">{selectedCustomer.tradeName ?? "Visão geral do relacionamento"}</p>
                     </div>
-                    <span className={`status-chip status-chip--${selectedCustomer.status}`}>{selectedCustomer.status}</span>
+                    <span className={`status-chip status-chip--${selectedCustomer.status}`}>
+                      {selectedCustomer.status === "inactive" ? "Inativo" : selectedCustomer.status === "blocked" ? "Bloqueado" : "Ativo"}
+                    </span>
                   </div>
 
                   <div className="detail-grid">
@@ -1032,7 +1038,7 @@ export function CustomerWorkspace() {
                       <strong>{formatPhone(selectedCustomer.phone)}</strong>
                     </div>
                     <div className="detail-field">
-                      <span>Email</span>
+                      <span>E-mail</span>
                       <strong>{selectedCustomer.email ?? "—"}</strong>
                     </div>
                     <div className="detail-field">
@@ -1041,7 +1047,7 @@ export function CustomerWorkspace() {
                     </div>
                     <div className="detail-field">
                       <span>Disponibilidade</span>
-                      <strong>Cliente disponível para todo o tenant</strong>
+                      <strong>Cliente disponível para toda a conta</strong>
                     </div>
                     <div className="detail-field">
                       <span>Endereço</span>
@@ -1115,7 +1121,7 @@ export function CustomerWorkspace() {
                           {savingCustomer ? "Gravando…" : "Gravar e Continuar"}
                         </button>
                         <button className="button-secondary" onClick={closeCustomerWorkspace} type="button">
-                          Close
+                          Fechar
                         </button>
                       </div>
                     </form>
@@ -1126,7 +1132,7 @@ export function CustomerWorkspace() {
                     <ul className="placeholder-list">
                       {(profile?.contacts ?? []).map((contact) => (
                         <li key={contact.id}>
-                          <strong>{contact.contactName}</strong> · {contact.email ?? "Sem email"} · {formatPhone(contact.phone)}
+                          <strong>{contact.contactName}</strong> · {contact.email ?? "Sem e-mail"} · {formatPhone(contact.phone)}
                         </li>
                       ))}
                     </ul>
@@ -1137,7 +1143,7 @@ export function CustomerWorkspace() {
                       <div className="workspace-toolbar">
                         <div className="workspace-toolbar__copy">
                           <h4>Gestão de medidas</h4>
-                          <p>Registre Measurement Sets versionados com data, observações, partes do corpo padronizadas e unidade padrão automática.</p>
+                          <p>Registre conjuntos de medidas com data, observações, partes do corpo padronizadas e a unidade padrão.</p>
                         </div>
                       </div>
 
@@ -1315,7 +1321,7 @@ export function CustomerWorkspace() {
                               Adicionar item ao conjunto
                             </button>
                             <button className="button" disabled={savingMeasurements} type="submit">
-                              {savingMeasurements ? "Salvando…" : "Registrar Measurement Set"}
+                              {savingMeasurements ? "Salvando…" : "Registrar conjunto de medidas"}
                             </button>
                           </div>
                         </form>
@@ -1327,7 +1333,7 @@ export function CustomerWorkspace() {
                           {(measurements?.measurementSets ?? []).map((set) => (
                             <li key={set.id}>
                               <strong>Versão {set.versionNo}</strong> · {formatDate(set.measurementDate)} · {set.items.map((item) => `${item.bodyPartDisplayName}: ${item.measuredValue} ${item.measurementUnitCode}`).join(" | ")}
-                              <div>{set.notes || `Measurement Set ${set.id}`}</div>
+                              <div>{set.notes || `Conjunto de medidas ${set.id}`}</div>
                             </li>
                           ))}
                         </ul>
@@ -1443,7 +1449,7 @@ function CustomerFields({
 
       <div className="filters-grid">
         <label className="field">
-          <span>Email</span>
+          <span>E-mail</span>
           <input type="email" value={form.email} onChange={(event) => onChange((current) => ({ ...current, email: event.target.value }))} />
         </label>
         <label className="field">
@@ -1551,7 +1557,7 @@ function MeasurementCatalogQuickCreate({
 
   return (
     <div className="form-grid">
-      <h4>Quick create</h4>
+      <h4>Cadastro rápido</h4>
       {kind === "unit" ? (
         <label className="field">
           <span>Código</span>

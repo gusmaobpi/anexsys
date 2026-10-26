@@ -315,6 +315,11 @@ export function ProductPricesWorkspace() {
       {isListWorkspace ? (
         <CadastroListPanel
           applyFilters={applyProductPriceFilters}
+          importActions={[{ kind: "prices" }]}
+          onImported={async (message) => {
+            setMessage(message);
+            await loadRecords();
+          }}
           buildExcelCsv={buildProductPriceExcelCsv}
           canInactivate={(row) => row.status !== "inactive"}
           canWrite={canWrite}

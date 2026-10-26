@@ -2070,6 +2070,11 @@ export function ServiceOrdersWorkspace() {
       {isListWorkspace ? (
         <CadastroListPanel
           applyFilters={applyOsListFilters}
+          importActions={[{ kind: "service-orders" }]}
+          onImported={async (message) => {
+            setMessage(message);
+            await loadOrders();
+          }}
           buildExcelCsv={buildOsExcelCsv}
           canWrite={canWrite}
           columnStorageKey="anexsys.frontend.os.grid-columns.v1"

@@ -148,7 +148,7 @@ export class CustomersController {
     }
 
     if (body.status === CustomerStatus.BLOCKED) {
-      throw new BadRequestException('Blocked customer lifecycle is outside Sprint 2 scope.');
+      throw new BadRequestException('A gestão de cliente bloqueado ainda não está disponível nesta tela.');
     }
 
     return this.customerService.update(customerId, tenantId, {

@@ -55,7 +55,7 @@ export function DependencyGuardPanel({ validation }: Props) {
                 }
                 type="button"
               >
-                {isMobile ? "Ver registro" : "Ver no workspace"}
+                {isMobile ? "Ver registro" : "Abrir cadastro"}
               </button>
               {!isMobile ? (
                 <button className="button-secondary" onClick={() => openWorkspaceInBrowserTab(blocker.workspacePath, blocker.label, { cloneCurrent: false })} type="button">

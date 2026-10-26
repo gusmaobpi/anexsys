@@ -21,6 +21,7 @@ import {
   type CustomerListFilters,
   type CustomerListRecord,
 } from "@/components/customers/customer-list";
+import { useImportCadastros } from "@/components/integration/import-cadastros-menu";
 import { SearchAutocomplete } from "@/components/ui/search-autocomplete";
 import type { SmartLookupOption } from "@/components/ui/lookup-suggestions";
 
@@ -64,6 +65,7 @@ type CustomerListPanelProps = {
   onDelete: (customer: CustomerListRecord) => void;
   onDeleteMany: (customers: CustomerListRecord[]) => void;
   onInactivate: (customer: CustomerListRecord) => void;
+  onImported?: (message: string) => void | Promise<void>;
 };
 
 export function CustomerListPanel({
@@ -77,11 +79,16 @@ export function CustomerListPanel({
   onDelete,
   onDeleteMany,
   onInactivate,
+  onImported,
 }: Readonly<CustomerListPanelProps>) {
   const [filters, setFilters] = useState<CustomerListFilters>(emptyCustomerListFilters);
   const [appliedFilters, setAppliedFilters] = useState<CustomerListFilters>(emptyCustomerListFilters);
   const [showFilters, setShowFilters] = useState(false);
   const [openMenu, setOpenMenu] = useState<"actions" | "columns" | null>(null);
+  const importer = useImportCadastros(async (message) => {
+    setOpenMenu(null);
+    await onImported?.(message);
+  }, ["customers", "measurements"]);
   const [visibleColumnIds, setVisibleColumnIds] = useState<CustomerListColumnId[]>(readStoredColumnIds);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<(typeof CUSTOMER_LIST_PAGE_SIZES)[number]>(10);
@@ -195,6 +202,8 @@ export function CustomerListPanel({
       <h2 className="cadastro-list__title">Clientes</h2>
 
       <div className="cadastro-toolbar" ref={toolbarRef}>
+        {importer.input}
+        {importer.panel}
         <div className="cadastro-toolbar__left">
           {canWrite ? (
             <button className="button" onClick={() => onCreate()} type="button">
@@ -239,6 +248,33 @@ export function CustomerListPanel({
                     Exportar e-mails
                   </button>
                 </li>
+                {canWrite
+                  ? (
+                      [
+                        { kind: "customers" as const, label: "Importar Cadastros" },
+                        { kind: "measurements" as const, label: "Importar medidas" },
+                      ] as const
+                    ).map((action) => (
+                      <li key={action.kind}>
+                        <button disabled={importer.pending} onClick={() => importer.open(action.kind)} type="button">
+                          {importer.pending && importer.activeKind === action.kind ? "Preparando…" : action.label}
+                        </button>
+                      </li>
+                    ))
+                  : null}
+                {canWrite ? (
+                  <li>
+                    <button
+                      onClick={() => {
+                        setOpenMenu(null);
+                        importer.openResults();
+                      }}
+                      type="button"
+                    >
+                      Resultados da integração
+                    </button>
+                  </li>
+                ) : null}
                 {canWrite ? (
                   <li>
                     <button

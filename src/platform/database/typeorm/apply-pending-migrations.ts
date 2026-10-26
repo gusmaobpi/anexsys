@@ -33,6 +33,7 @@ import { Whatsapp1760000053000 } from './migrations/1760000053000-whatsapp';
 import { EmailSettings1760000054000 } from './migrations/1760000054000-email-settings';
 import { ServiceOrderRelease1760000055000 } from './migrations/1760000055000-service-order-release';
 import { DashboardParameters1760000057000 } from './migrations/1760000057000-dashboard-parameters';
+import { IntegrationRuns1760000059000 } from './migrations/1760000059000-integration-runs';
 import { FloorDiaryVersion1760000056000 } from './migrations/1760000056000-floor-diary-version';
 
 export async function applyPendingMigrations(dataSource: DataSource): Promise<void> {
@@ -59,6 +60,7 @@ export async function ensureAtelierOsSchema(dataSource: DataSource): Promise<voi
       await new ServiceOrderRelease1760000055000().up(queryRunner);
       await new FloorDiaryVersion1760000056000().up(queryRunner);
       await new DashboardParameters1760000057000().up(queryRunner);
+      await new IntegrationRuns1760000059000().up(queryRunner);
       await new PaymentMachineWait1760000049000().up(queryRunner);
       await new PaymentManualReason1760000046000().up(queryRunner);
       await new PaymentReversal1760000047000().up(queryRunner);

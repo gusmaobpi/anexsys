@@ -134,7 +134,7 @@ export class ServiceOrderService {
     const maxPiecesPerBag = tenant.maxPiecesPerBag ?? DEFAULT_MAX_PIECES_PER_BAG;
     const branch = await this.branchService.getById(dto.branchId);
     if (branch.tenantId !== dto.tenantId) {
-      throw new DomainValidationError('Branch must belong to the same tenant as the service order.');
+      throw new DomainValidationError('A filial precisa pertencer à mesma conta da ordem de serviço.');
     }
 
     const customer = await this.customerService.getById(dto.customerId, dto.tenantId);
@@ -299,7 +299,7 @@ export class ServiceOrderService {
     if (filters.branchId) {
       const branch = await this.branchService.getById(filters.branchId);
       if (branch.tenantId !== tenantId) {
-        throw new DomainValidationError('Branch must belong to the same tenant.');
+        throw new DomainValidationError('A filial precisa pertencer à mesma conta.');
       }
     }
     if (filters.customerId) {
@@ -727,7 +727,7 @@ export class ServiceOrderService {
     await this.tenantService.getById(tenantId);
     const branch = await this.branchService.getById(input.branchId);
     if (branch.tenantId !== tenantId) {
-      throw new DomainValidationError('Branch must belong to the same tenant.');
+      throw new DomainValidationError('A filial precisa pertencer à mesma conta.');
     }
     return this.deliveryDateService.suggestDelivery(
       tenantId,
@@ -741,7 +741,7 @@ export class ServiceOrderService {
     const serviceOrder = await this.getById(serviceOrderId, tenantId);
 
     if (serviceOrder.status === ServiceOrderStatus.CANCELLED) {
-      throw new DomainValidationError('Cancelled service orders cannot be edited.');
+      throw new DomainValidationError('Ordens de serviço canceladas não podem ser alteradas.');
     }
     this.assertHeaderWritableWhenBagClosed(serviceOrder, dto);
 
@@ -858,10 +858,10 @@ export class ServiceOrderService {
   async addItem(dto: CreateServiceOrderItemDto): Promise<ServiceOrderItemEntity> {
     const serviceOrder = await this.getById(dto.serviceOrderId, dto.tenantId);
     if (serviceOrder.branchId !== dto.branchId) {
-      throw new DomainValidationError('Service Order item branch must match the parent Service Order branch.');
+      throw new DomainValidationError('A peça precisa estar na mesma filial da ordem de serviço.');
     }
     if (serviceOrder.status === ServiceOrderStatus.CANCELLED) {
-      throw new DomainValidationError('Cancelled service orders cannot receive new items.');
+      throw new DomainValidationError('Ordens de serviço canceladas não podem receber novas peças.');
     }
     this.assertBagOpen(serviceOrder);
 
@@ -927,7 +927,7 @@ export class ServiceOrderService {
       }
     }
     if (!savedItem) {
-      throw new DomainValidationError('Unable to allocate a unique Service Order item number.');
+      throw new DomainValidationError('Não foi possível numerar a peça desta ordem.');
     }
 
     await this.recalculateTotal(serviceOrder, dto.actorUserId);
@@ -961,7 +961,7 @@ export class ServiceOrderService {
       throw new EntityNotFoundError(`Service Order Item '${itemId}' was not found.`);
     }
     if (serviceOrder.status === ServiceOrderStatus.CANCELLED) {
-      throw new DomainValidationError('Cancelled service orders cannot be edited.');
+      throw new DomainValidationError('Ordens de serviço canceladas não podem ser alteradas.');
     }
     this.assertBagOpen(serviceOrder);
 
@@ -1326,7 +1326,7 @@ export class ServiceOrderService {
   ): Promise<ServiceOrderEntity> {
     const serviceOrder = await this.getById(serviceOrderId, tenantId);
     if (serviceOrder.status === ServiceOrderStatus.CANCELLED) {
-      throw new DomainValidationError('Cancelled service orders cannot enter quality review.');
+      throw new DomainValidationError('Ordens de serviço canceladas não entram no controle de qualidade.');
     }
     if (serviceOrder.status === status) {
       return serviceOrder;
@@ -2362,7 +2362,7 @@ export class ServiceOrderService {
   async cancel(serviceOrderId: string, tenantId: string, actorUserId: string): Promise<ServiceOrderEntity> {
     const serviceOrder = await this.getById(serviceOrderId, tenantId);
     if (serviceOrder.status === ServiceOrderStatus.CANCELLED) {
-      throw new DomainValidationError('Service order is already cancelled.');
+      throw new DomainValidationError('Esta ordem de serviço já está cancelada.');
     }
     serviceOrder.status = ServiceOrderStatus.CANCELLED;
     serviceOrder.updatedBy = actorUserId;
@@ -2624,7 +2624,7 @@ export class ServiceOrderService {
 
   private assertCustomerBranchCompatibility(customerBranchId: string | null, branchId: string): void {
     if (customerBranchId && customerBranchId !== branchId) {
-      throw new DomainValidationError('Branch-scoped customers must use the same branch as the Service Order.');
+      throw new DomainValidationError('O cliente desta filial precisa ser o da mesma filial da ordem de serviço.');
     }
   }
 }

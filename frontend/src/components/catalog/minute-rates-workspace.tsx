@@ -292,6 +292,11 @@ export function MinuteRatesWorkspace() {
       {isListWorkspace ? (
         <CadastroListPanel
           applyFilters={applyMinuteRateFilters}
+          importActions={[{ kind: "minute-rates" }]}
+          onImported={async (message) => {
+            setMessage(message);
+            await loadRecords();
+          }}
           buildExcelCsv={buildMinuteRateExcelCsv}
           canInactivate={(row) => row.status !== "inactive"}
           canWrite={canWrite}

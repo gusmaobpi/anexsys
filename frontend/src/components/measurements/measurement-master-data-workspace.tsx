@@ -445,6 +445,11 @@ export function MeasurementMasterDataWorkspace({ mode }: Props) {
       {isListWorkspace ? (
         <CadastroListPanel
           applyFilters={applyMeasurementListFilters}
+          importActions={[{ kind: mode === "body-parts" ? "body-parts" : "units" }]}
+          onImported={async (message) => {
+            setMessage(message);
+            await loadRecords();
+          }}
           buildExcelCsv={buildMeasurementExcelCsv}
           canInactivate={(row) => row.status !== "inactive"}
           canWrite={canWrite}

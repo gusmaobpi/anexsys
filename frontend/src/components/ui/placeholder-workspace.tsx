@@ -13,14 +13,14 @@ export function PlaceholderWorkspace({ title, description, bullets, aside }: Rea
   return (
     <>
       <section className="hero-card">
-        <div className="eyebrow">Frontend Sprint 1</div>
+        <div className="eyebrow">ANEXSYS</div>
         <h1 className="title">{title}</h1>
         <p>{description}</p>
       </section>
 
       <section className="card-grid">
         <article className="mini-card">
-          <h3>Current scope</h3>
+          <h3>O que esta tela cobre</h3>
           <ul className="placeholder-list">
             {bullets.map((bullet) => (
               <li key={bullet}>{bullet}</li>
@@ -28,10 +28,10 @@ export function PlaceholderWorkspace({ title, description, bullets, aside }: Rea
           </ul>
         </article>
         <article className="mini-card">
-          <h3>Implementation note</h3>
+          <h3>Observação</h3>
           <p>
-            This screen is intentionally a placeholder in Sprint 1. The shell, active context, sign-in flow, and access-based
-            navigation are ready so the team can validate the UX structure before deeper domain work begins.
+            Esta tela ainda é um espaço reservado. O menu, o contexto ativo, o login e a navegação por acesso já estão prontos
+            para validar a estrutura antes do restante do trabalho.
           </p>
         </article>
         {aside ? <article className="mini-card">{aside}</article> : null}

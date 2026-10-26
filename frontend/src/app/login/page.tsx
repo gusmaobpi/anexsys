@@ -68,9 +68,9 @@ export default function LoginPage() {
       <section className="auth-card">
         <div className="auth-card__header">
           <div className="eyebrow">ANEXSYS</div>
-          <h1 className="title">Administrative login</h1>
+          <h1 className="title">Login</h1>
           <p className="subtitle">
-            Sign in with your email and password. Company and filial open automatically when possible.
+            Entre com o e-mail e a senha. A conta e a filial abrem sozinhas quando der.
           </p>
         </div>
 
@@ -78,16 +78,16 @@ export default function LoginPage() {
           <form autoComplete="off" className="form-grid" onSubmit={handleSubmit}>
             {errorMessage ? (
               <div className="error-banner">
-                <strong>Authentication failed</strong>
+                <strong>Não foi possível entrar</strong>
                 <span>{errorMessage}</span>
                 <button className="button-ghost" onClick={clearError} type="button">
-                  Dismiss
+                  Fechar
                 </button>
               </div>
             ) : null}
 
             <div className="field">
-              <label htmlFor="login-email">Email</label>
+              <label htmlFor="login-email">E-mail</label>
               <input
                 ref={emailInputRef}
                 id="login-email"
@@ -99,13 +99,13 @@ export default function LoginPage() {
                   hasUserEditedEmailRef.current = true;
                   setEmail(event.target.value);
                 }}
-                placeholder="admin@company.test"
+                placeholder="nome@empresa.com.br"
                 required
               />
             </div>
 
             <div className="field">
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">Senha</label>
               <div className="password-field">
                 <input
                   id="password"
@@ -114,7 +114,7 @@ export default function LoginPage() {
                   autoComplete="current-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Minimum 8 characters"
+                  placeholder="Mínimo de 8 caracteres"
                   minLength={8}
                   required
                 />
@@ -123,14 +123,14 @@ export default function LoginPage() {
                   onClick={() => setPasswordVisible((current) => !current)}
                   type="button"
                 >
-                  {passwordVisible ? "Hide" : "Show"}
+                  {passwordVisible ? "Ocultar" : "Mostrar"}
                 </button>
               </div>
             </div>
 
             <div className="button-row">
               <button className="button" disabled={submitting} type="submit">
-                {submitting ? "Signing in…" : "Sign in"}
+                {submitting ? "Entrando…" : "Entrar"}
               </button>
               <Link href="/forgot-password">Esqueci a senha</Link>
             </div>

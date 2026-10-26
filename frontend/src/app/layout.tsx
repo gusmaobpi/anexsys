@@ -4,13 +4,13 @@ import { SessionProvider } from "@/components/providers/session-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ANEXSYS Frontend",
-  description: "ANEXSYS administrative frontend sprint 1 shell",
+  title: "ANEXSYS",
+  description: "Sistema de ordens de serviço do ateliê",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="pt-BR" suppressHydrationWarning>
       <body>
         <SessionProvider>{children}</SessionProvider>
       </body>

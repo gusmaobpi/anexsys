@@ -15,6 +15,7 @@ import {
   toggleTreeId,
   writeSidebarTree,
 } from "@/components/app-shell/sidebar-tree";
+import { INTEGRATION_ORDER_HREF } from "@/components/integration/migration-layouts";
 import { useSession } from "@/components/providers/session-provider";
 
 type NavItem = {
@@ -192,6 +193,17 @@ const navSections: NavSection[] = [
         label: "Escala de hoje",
         hint: "Confirmados, identificados e ativos",
         requiredPermissions: ["service_orders.read"],
+      },
+    ],
+  },
+  {
+    title: "Integração",
+    items: [
+      {
+        href: INTEGRATION_ORDER_HREF,
+        label: "Importar Registros",
+        hint: "Escolhe o layout, baixa a planilha e importa",
+        requiredPermissions: ["users.write"],
       },
     ],
   },

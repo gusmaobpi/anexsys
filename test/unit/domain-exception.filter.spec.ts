@@ -45,7 +45,7 @@ describe('DomainExceptionFilter', () => {
     assert.equal(result.statusCode, 400);
     assert.deepEqual(result.body, {
       message:
-        'Customer could not be saved. Some registration fields are missing or invalid. Review name, contact, address, and document information, then try again.',
+        'Não foi possível gravar o cliente. Algum campo do cadastro está faltando ou inválido. Revise nome, contato, endereço e documento e tente de novo.',
     });
   });
 
@@ -53,14 +53,14 @@ describe('DomainExceptionFilter', () => {
     const { host, result } = createHost({ method: 'PATCH', url: '/api/v1/customers/customer-1' });
 
     new DomainExceptionFilter().catch(
-      new BadRequestException('Blocked customer lifecycle is outside Sprint 2 scope.'),
+      new BadRequestException('A gestão de cliente bloqueado ainda não está disponível nesta tela.'),
       host as never,
     );
 
     assert.equal(result.statusCode, 400);
     assert.deepEqual(result.body, {
       error: 'Bad Request',
-      message: 'Blocked customer lifecycle is outside Sprint 2 scope.',
+      message: 'A gestão de cliente bloqueado ainda não está disponível nesta tela.',
       statusCode: 400,
     });
   });

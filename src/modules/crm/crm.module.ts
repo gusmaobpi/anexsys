@@ -59,6 +59,6 @@ import { MeasurementUnitRepository } from './infrastructure/persistence/reposito
     MeasurementSetItemRepository,
     MeasurementUnitRepository,
   ],
-  exports: [CustomerService, MeasurementService],
+  exports: [CustomerService, MeasurementCatalogService, MeasurementService],
 })
 export class CrmModule {}

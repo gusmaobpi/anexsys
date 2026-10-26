@@ -1,5 +1,5 @@
 export class AuthenticationFailedError extends Error {
-  constructor(message = 'Authentication failed') {
+  constructor(message = 'E-mail ou senha inválidos.') {
     super(message);
     this.name = 'AuthenticationFailedError';
   }

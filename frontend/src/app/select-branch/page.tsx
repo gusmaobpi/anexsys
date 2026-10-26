@@ -23,7 +23,7 @@ export default function SelectBranchPage() {
   }, [router, session?.activeBranchId, status]);
 
   if (!session) {
-    return <div className="loading-state">Loading your company and filial…</div>;
+    return <div className="loading-state">Carregando a conta e a filial…</div>;
   }
 
   const activeConta = session.companies.find((company) => company.tenantId === session.tenantId) ?? null;
@@ -133,7 +133,7 @@ export default function SelectBranchPage() {
                     >
                       <div className="eyebrow">Filial</div>
                       <h2 style={{ marginTop: 12 }}>{branch.label}</h2>
-                      <p className="branch-card__meta">{pendingBranchId === branch.id ? "Applying context…" : branch.hint ?? "Abrir filial"}</p>
+                      <p className="branch-card__meta">{pendingBranchId === branch.id ? "Aplicando o contexto…" : branch.hint ?? "Abrir filial"}</p>
                     </button>
                   ))}
                 </div>

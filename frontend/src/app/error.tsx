@@ -11,19 +11,19 @@ export default function GlobalError({
     <div className="screen-shell">
       <section className="auth-card">
         <div className="auth-card__header">
-          <div className="eyebrow">ANEXSYS · Error handling</div>
-          <h1 className="title">Something went wrong</h1>
-          <p className="subtitle">Sprint 1 includes a global error surface so early navigation and session issues stay understandable.</p>
+          <div className="eyebrow">ANEXSYS · Erro</div>
+          <h1 className="title">Algo deu errado</h1>
+          <p className="subtitle">Não foi possível concluir esta tela. Tente de novo.</p>
         </div>
 
         <div className="auth-card__body">
           <div className="error-banner">
-            <strong>{error.name || "Application error"}</strong>
-            <span>{error.message || "Unexpected UI failure."}</span>
+            <strong>{error.name || "Erro do sistema"}</strong>
+            <span>{error.message || "Falha inesperada na tela."}</span>
           </div>
           <div className="button-row">
             <button className="button" onClick={reset} type="button">
-              Retry
+              Tentar de novo
             </button>
           </div>
         </div>
