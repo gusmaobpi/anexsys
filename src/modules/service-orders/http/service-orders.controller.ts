@@ -847,6 +847,43 @@ export class ServiceOrdersController {
     return this.serviceOrderService.advanceFloor(tenantId, serviceOrderId, principal.userId);
   }
 
+  @Permissions('service_orders.read')
+  @Get(':serviceOrderId/floor-items')
+  async listFloorItems(
+    @Param('serviceOrderId', new ParseUUIDPipe()) serviceOrderId: string,
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+  ) {
+    const principal = request.requestContext.authenticatedPrincipal;
+    if (!tenantId || !principal) {
+      throw new UnauthorizedException('Authenticated tenant context is required.');
+    }
+    const serviceOrder = await this.serviceOrderService.getById(serviceOrderId, tenantId);
+    this.serviceOrderService.assertBranchAccess(serviceOrder, principal.effectiveBranchIds);
+    return this.serviceOrderService.listFloorItems(tenantId, serviceOrderId);
+  }
+
+  @Permissions('service_orders.read')
+  @Post(':serviceOrderId/floor-items/:serviceOrderItemId/finish')
+  async finishFloorItem(
+    @Param('serviceOrderId', new ParseUUIDPipe()) serviceOrderId: string,
+    @Param('serviceOrderItemId', new ParseUUIDPipe()) serviceOrderItemId: string,
+    @CurrentTenantId() tenantId: string | null,
+    @CurrentRequest() request: PlatformRequest,
+  ) {
+    const principal = request.requestContext.authenticatedPrincipal;
+    if (!tenantId || !principal) {
+      throw new UnauthorizedException('Authenticated tenant context is required.');
+    }
+    const serviceOrder = await this.serviceOrderService.getById(serviceOrderId, tenantId);
+    this.serviceOrderService.assertBranchAccess(serviceOrder, principal.effectiveBranchIds);
+    const action = nextFloorAction(serviceOrder.status, serviceOrder.bagClosed);
+    if (action && !canRunFloorAction(action, principal.effectivePermissions)) {
+      throw new ForbiddenException('Você não tem permissão para este passo de produção.');
+    }
+    return this.serviceOrderService.finishFloorItem(tenantId, serviceOrderId, serviceOrderItemId, principal.userId);
+  }
+
   @Permissions('service_orders.write')
   @Patch(':serviceOrderId')
   async update(

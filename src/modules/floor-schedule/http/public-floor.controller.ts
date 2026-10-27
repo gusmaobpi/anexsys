@@ -82,6 +82,27 @@ export class PublicFloorController {
   }
 
   @Public()
+  @Post('sessions/:sessionId/production')
+  @Header('X-Robots-Tag', 'noindex, nofollow')
+  productionItems(
+    @Param('sessionId', new ParseUUIDPipe()) sessionId: string,
+    @Body() body: PublicOrderBody,
+  ) {
+    return this.floorScheduleService.productionItemsPublic(body.code, sessionId, body.serviceOrderId);
+  }
+
+  @Public()
+  @Post('sessions/:sessionId/production-items/:itemId')
+  @Header('X-Robots-Tag', 'noindex, nofollow')
+  finishItem(
+    @Param('sessionId', new ParseUUIDPipe()) sessionId: string,
+    @Param('itemId', new ParseUUIDPipe()) itemId: string,
+    @Body() body: PublicOrderBody,
+  ) {
+    return this.floorScheduleService.finishPublicItem(body.code, sessionId, body.serviceOrderId, itemId);
+  }
+
+  @Public()
   @Post('sessions/:sessionId/items/:itemId')
   @Header('X-Robots-Tag', 'noindex, nofollow')
   decide(

@@ -70,3 +70,13 @@ export function isBusyFloorStatus(status: string): boolean {
 export function canReopenBagAfterFloor(status: string): boolean {
   return status === ServiceOrderStatus.OPEN || status === ServiceOrderStatus.APPROVED;
 }
+
+export function isItemFinishAction(action: FloorAction): boolean {
+  return action === 'finish_production' || action === 'finish_rework';
+}
+
+export function measuredExecutionMinutes(startedAt: Date, finishedAt: Date, quantity: number): number {
+  const units = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+  const elapsedMinutes = Math.max(0, finishedAt.getTime() - startedAt.getTime()) / 60000;
+  return Math.max(1, Math.round(elapsedMinutes / units));
+}

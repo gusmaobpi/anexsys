@@ -53,17 +53,17 @@ export function productionFloorAction(status: string, bagClosed: boolean): Exclu
 
 export function floorActionHint(action: FloorAction) {
   if (action === "pick_up") return "Pegue a sacola da esteira. A OS vai para Em produção. A leitura do QR, quando existir, dispara o mesmo passo.";
-  if (action === "finish_production") return "Quando terminar, devolva a sacola. A OS vai para Aguardando controle de qualidade.";
+  if (action === "finish_production") return "Termine cada item. A OP vai para Aguardando qualidade quando o último item terminar.";
   if (action === "open_review") return "O revisor abre a sacola no Controle de qualidade.";
   if (action === "pick_up_rework") return "Pegue as peças reprovadas para refação.";
-  return "Quando a refação terminar, a OS volta para Aguardando controle de qualidade.";
+  return "Termine cada item da refação. A OP volta para Aguardando qualidade quando o último item terminar.";
 }
 
 export function floorActionSuccessMessage(action: FloorAction, orderNo: string) {
-  if (action === "pick_up") return `OS ${orderNo} em produção. Quando terminar, clique em Terminei.`;
+  if (action === "pick_up") return `OS ${orderNo} em produção. Termine item a item.`;
   if (action === "finish_production") return `OS ${orderNo} aguardando controle de qualidade.`;
   if (action === "open_review") return `OS ${orderNo} em Controle de qualidade. Revise peça a peça.`;
-  if (action === "pick_up_rework") return `OS ${orderNo} em refação. Quando terminar, clique em Terminei a refação.`;
+  if (action === "pick_up_rework") return `OS ${orderNo} em refação. Termine item a item.`;
   return `OS ${orderNo} voltou para Aguardando controle de qualidade.`;
 }
 

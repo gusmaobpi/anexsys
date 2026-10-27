@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   canReopenBagAfterFloor,
   floorActionResultStatus,
+  measuredExecutionMinutes,
   nextFloorAction,
 } from '../../src/modules/service-orders/application/service-order/service-order-floor';
 
@@ -21,6 +22,13 @@ test('floor steps follow the production sequence for the manual Pegar sacola pat
   assert.equal(nextFloorAction('awaiting_proof', true), null);
   assert.equal(nextFloorAction('ready_for_pickup', true), null);
   assert.equal(nextFloorAction('picked_up', true), null);
+});
+
+test('measures the last execution from the previous click, per unit', () => {
+  const start = new Date('2026-10-27T12:00:00.000Z');
+  assert.equal(measuredExecutionMinutes(start, new Date('2026-10-27T12:01:30.000Z'), 1), 2);
+  assert.equal(measuredExecutionMinutes(start, new Date('2026-10-27T12:00:20.000Z'), 1), 1);
+  assert.equal(measuredExecutionMinutes(start, new Date('2026-10-27T12:10:00.000Z'), 2), 5);
 });
 
 test('blocks reopening the bag after production started', () => {

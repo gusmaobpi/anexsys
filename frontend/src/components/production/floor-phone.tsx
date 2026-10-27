@@ -55,6 +55,14 @@ type QualityPiece = {
   reason: string | null;
   canDecide: boolean;
 };
+type FloorPiece = {
+  id: string;
+  itemNo: number;
+  itemType: string;
+  description: string;
+  complement: string | null;
+  finished: boolean;
+};
 type QualityReview = {
   phase: "needs_review" | "rework_issued" | "ready";
   serviceOrder: { id: string; orderNo: string; status?: string };
@@ -74,6 +82,7 @@ export function FloorPhone() {
   const [card, setCard] = useState<Card | null>(null);
   const [actionLabel, setActionLabel] = useState<string | null>(null);
   const [review, setReview] = useState<QualityReview | null>(null);
+  const [pieces, setPieces] = useState<FloorPiece[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -101,9 +110,11 @@ export function FloorPhone() {
         card: Card;
         actionLabel: string | null;
         review: QualityReview | null;
+        floorItems: FloorPiece[] | null;
       }>(`/sessions/${session.id}/read`, { code, codeValue });
       setCard(response.card);
       setActionLabel(response.actionLabel);
+      setPieces(response.floorItems ?? null);
       if (response.purpose === "quality") {
         setReview(response.review);
       }
@@ -165,15 +176,25 @@ export function FloorPhone() {
     setBusy(true);
     setError(null);
     try {
-      const response = await publicFloor<{ openCamera: boolean; order: { id: string; orderNo: string; status: string } }>(
+      const response = await publicFloor<{
+        openCamera: boolean;
+        order: { id: string; orderNo: string; status: string };
+        floorItems: FloorPiece[] | null;
+      }>(
         `/sessions/${session.id}/advance`,
         { code, serviceOrderId },
       );
-      setCard(null);
       setReview(null);
       setSession((current) => current
         ? { ...current, currentOrder: response.openCamera ? null : { id: response.order.id, orderNo: response.order.orderNo, status: response.order.status } }
         : current);
+      if (response.floorItems) {
+        setPieces(response.floorItems);
+        setActionLabel(null);
+        return;
+      }
+      setCard(null);
+      setPieces(null);
       if (response.openCamera) setScanning(true);
     } catch (reason) {
       setError(describeWorkspaceError(reason, "O passo não foi gravado."));
@@ -181,6 +202,39 @@ export function FloorPhone() {
       setBusy(false);
     }
   }
+
+  async function finishPiece(itemId: string, serviceOrderId: string) {
+    if (!session) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await publicFloor<{ items: FloorPiece[]; released: boolean; openCamera: boolean }>(
+        `/sessions/${session.id}/production-items/${itemId}`,
+        { code, serviceOrderId },
+      );
+      if (result.released) {
+        setCard(null);
+        setPieces(null);
+        setReview(null);
+        setSession((current) => (current ? { ...current, currentOrder: null } : current));
+        if (result.openCamera) setScanning(true);
+        return;
+      }
+      setPieces(result.items);
+    } catch (reason) {
+      setError(describeWorkspaceError(reason, "O item não foi terminado."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!session?.currentOrder || card || review || scanning || pieces) return;
+    const serviceOrderId = session.currentOrder.id;
+    void publicFloor<{ items: FloorPiece[] }>(`/sessions/${session.id}/production`, { code, serviceOrderId })
+      .then((response) => setPieces(response.items))
+      .catch((reason) => setError(describeWorkspaceError(reason, "Os itens da OP não abriram.")));
+  }, [card, code, pieces, review, scanning, session]);
 
   async function decide(itemId: string, decision: "approved" | "rejected") {
     if (!review || !session) return;
@@ -255,10 +309,15 @@ export function FloorPhone() {
         <div className="button-row">
           {holding ? (
             <>
-              <p>Você está com a OS {holding.orderNo}.</p>
-              <button className="button" disabled={busy} onClick={() => void advance(holding.id)} type="button">
-                Terminei
-              </button>
+              <p>Você está com a OS {holding.orderNo}. Termine item a item.</p>
+              {(pieces ?? []).map((item) => (
+                <div key={item.id}>
+                  <p><strong>{item.itemNo}. {item.itemType}</strong> · {item.description}</p>
+                  {item.finished ? <p>Terminado</p> : (
+                    <button className="button" disabled={busy} onClick={() => void finishPiece(item.id, holding.id)} type="button">Terminei</button>
+                  )}
+                </div>
+              ))}
             </>
           ) : session.status === "active" ? (
             <button className="button" onClick={() => setScanning(true)} type="button">Ler ordem de produção</button>
@@ -290,6 +349,14 @@ export function FloorPhone() {
               {item.rejectionReason ? <><br />Refazer: {item.rejectionReason}</> : null}
               {item.proofNote ? <><br />Prova: {item.proofNote}</> : null}
             </p>
+          ))}
+          {pieces?.map((item) => (
+            <div key={item.id}>
+              <p><strong>{item.itemNo}. {item.itemType}</strong> · {item.description}</p>
+              {item.finished ? <p>Terminado</p> : (
+                <button className="button" disabled={busy} onClick={() => void finishPiece(item.id, card.serviceOrderId)} type="button">Terminei</button>
+              )}
+            </div>
           ))}
           {actionLabel ? (
             <button className="button" disabled={busy} onClick={() => void advance(card.serviceOrderId)} type="button">{actionLabel}</button>

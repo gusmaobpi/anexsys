@@ -5,7 +5,7 @@ import { AuditService } from 'src/modules/audit/application/audit/audit.service'
 import { IdentityService } from 'src/modules/identity/application/identity/identity.service';
 import { ProductionOrderService } from 'src/modules/production-orders/application/production-order/production-order.service';
 import { QualityService } from 'src/modules/quality/application/quality/quality.service';
-import { beltFloorActionLabel, nextFloorAction } from 'src/modules/service-orders/application/service-order/service-order-floor';
+import { beltFloorActionLabel, isItemFinishAction, nextFloorAction } from 'src/modules/service-orders/application/service-order/service-order-floor';
 import { ServiceOrderService } from 'src/modules/service-orders/application/service-order/service-order.service';
 import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
 import {
@@ -708,6 +708,27 @@ export class FloorScheduleService {
     return this.advance(anchor.tenantId, sessionId, serviceOrderId);
   }
 
+  async productionItemsPublic(code: string, sessionId: string, serviceOrderId: string) {
+    const { anchor, session } = await this.bindPublic(code, sessionId);
+    if (session.purpose !== 'production' || session.status !== 'active') {
+      throw new DomainValidationError('A sessão está encerrada.');
+    }
+    const order = await this.serviceOrderService.getById(serviceOrderId, anchor.tenantId);
+    if (order.branchId !== anchor.branchId) {
+      throw new DomainValidationError('Esta OP é de outra filial.');
+    }
+    return this.serviceOrderService.listFloorItems(anchor.tenantId, serviceOrderId);
+  }
+
+  async finishPublicItem(code: string, sessionId: string, serviceOrderId: string, serviceOrderItemId: string) {
+    const { anchor } = await this.bindPublic(code, sessionId);
+    const order = await this.serviceOrderService.getById(serviceOrderId, anchor.tenantId);
+    if (order.branchId !== anchor.branchId) {
+      throw new DomainValidationError('Esta OP é de outra filial.');
+    }
+    return this.finishItem(anchor.tenantId, sessionId, serviceOrderId, serviceOrderItemId);
+  }
+
   async decidePublic(
     code: string,
     sessionId: string,
@@ -769,12 +790,16 @@ export class FloorScheduleService {
     if (action === 'pick_up_rework' && !(await this.serviceOrderService.isReworkWaitingOnBelt(tenantId, card.serviceOrderId))) {
       throw new DomainValidationError('Esta OP ainda está no controle de qualidade.');
     }
+    const floorItems = isItemFinishAction(action)
+      ? (await this.serviceOrderService.listFloorItems(tenantId, card.serviceOrderId)).items
+      : null;
     return {
       purpose: 'production' as const,
       serviceOrderId: card.serviceOrderId,
       card,
-      action,
-      actionLabel: beltFloorActionLabel(action),
+      action: floorItems ? null : action,
+      actionLabel: floorItems ? null : beltFloorActionLabel(action),
+      floorItems,
       openCamera: false,
     };
   }
@@ -792,12 +817,32 @@ export class FloorScheduleService {
     if (!before || before === 'open_review') {
       throw new DomainValidationError('Esta OP não está disponível para pegar ou terminar.');
     }
-    const finished = before === 'finish_production' || before === 'finish_rework';
-    if (!finished && session.status !== 'active') {
+    if (isItemFinishAction(before)) {
+      const view = await this.serviceOrderService.listFloorItems(tenantId, serviceOrderId);
+      return { order: { id: order.id, orderNo: order.orderNo, status: order.status }, openCamera: false, floorItems: view.items };
+    }
+    if (session.status !== 'active') {
       throw new DomainValidationError('A sessão está encerrada.');
     }
     const details = await this.serviceOrderService.advanceFloor(tenantId, serviceOrderId, session.userId);
-    return { order: details.serviceOrder, openCamera: finished && session.status === 'active' };
+    const view = await this.serviceOrderService.listFloorItems(tenantId, serviceOrderId);
+    return { order: details.serviceOrder, openCamera: false, floorItems: view.items };
+  }
+
+  async finishItem(tenantId: string, sessionId: string, serviceOrderId: string, serviceOrderItemId: string) {
+    const session = await this.requireSession(tenantId, sessionId);
+    if (session.purpose !== 'production') {
+      throw new DomainValidationError('A qualidade revisa. Ela não pega sacola.');
+    }
+    if (session.status !== 'active') {
+      throw new DomainValidationError('A sessão está encerrada.');
+    }
+    const order = await this.serviceOrderService.getById(serviceOrderId, tenantId);
+    if (order.branchId !== session.branchId) {
+      throw new DomainValidationError('Esta OP é de outra filial.');
+    }
+    const result = await this.serviceOrderService.finishFloorItem(tenantId, serviceOrderId, serviceOrderItemId, session.userId);
+    return { ...result, openCamera: result.released };
   }
 
   private assertCanHandle(card: { floorHolderUserId: string | null; serviceOrderId: string }, userId: string) {

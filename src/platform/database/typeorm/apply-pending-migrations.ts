@@ -35,6 +35,7 @@ import { ServiceOrderRelease1760000055000 } from './migrations/1760000055000-ser
 import { DashboardParameters1760000057000 } from './migrations/1760000057000-dashboard-parameters';
 import { IntegrationRuns1760000059000 } from './migrations/1760000059000-integration-runs';
 import { FloorDiaryVersion1760000056000 } from './migrations/1760000056000-floor-diary-version';
+import { FloorItemFinish1760000060000 } from './migrations/1760000060000-floor-item-finish';
 
 export async function applyPendingMigrations(dataSource: DataSource): Promise<void> {
   if (typeof dataSource.runMigrations === 'function') {
@@ -59,6 +60,7 @@ export async function ensureAtelierOsSchema(dataSource: DataSource): Promise<voi
       await new EmailSettings1760000054000().up(queryRunner);
       await new ServiceOrderRelease1760000055000().up(queryRunner);
       await new FloorDiaryVersion1760000056000().up(queryRunner);
+      await new FloorItemFinish1760000060000().up(queryRunner);
       await new DashboardParameters1760000057000().up(queryRunner);
       await new IntegrationRuns1760000059000().up(queryRunner);
       await new PaymentMachineWait1760000049000().up(queryRunner);

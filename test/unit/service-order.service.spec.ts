@@ -560,6 +560,34 @@ describe('ServiceOrderService', () => {
     );
   });
 
+  it('keeps a bag in production until each item is finished', async () => {
+    const service = new ServiceOrderService(
+      buildDataSource() as never,
+      {
+        async findById() {
+          return { id: 'so-1', tenantId: 'tenant-1', status: 'in_production', bagClosed: true, branchId: 'branch-1' };
+        },
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await assert.rejects(
+      () => service.advanceFloor('tenant-1', 'so-1', 'user-1'),
+      (error: unknown) => {
+        assert.ok(error instanceof DomainValidationError);
+        assert.match(error.message, /último item/);
+        return true;
+      },
+    );
+  });
+
   it('refuses floor advance while the bag is open', async () => {
     const service = new ServiceOrderService(
       buildDataSource() as never,

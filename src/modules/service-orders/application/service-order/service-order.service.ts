@@ -31,6 +31,8 @@ import {
   canReopenBagAfterFloor,
   floorActionAudit,
   floorActionResultStatus,
+  isItemFinishAction,
+  measuredExecutionMinutes,
   nextFloorAction,
 } from './service-order-floor';
 import {
@@ -1134,6 +1136,9 @@ export class ServiceOrderService {
     if (!action) {
       throw new DomainValidationError('Não há próximo passo de produção para esta OS.');
     }
+    if (isItemFinishAction(action)) {
+      throw new DomainValidationError('Termine cada item. A OP vai para Aguardando qualidade quando o último item terminar.');
+    }
     if (action === 'pick_up_rework' && !(await this.isReworkWaitingOnBelt(tenantId, serviceOrder.id))) {
       throw new DomainValidationError('Esta OP ainda está no controle de qualidade.');
     }
@@ -1170,6 +1175,262 @@ export class ServiceOrderService {
     });
     await this.recordFloorDiary(saved, actorUserId, action);
     return this.getDetails(tenantId, saved.id);
+  }
+
+  async listFloorItems(tenantId: string, serviceOrderId: string) {
+    const serviceOrder = await this.getById(serviceOrderId, tenantId);
+    this.assertFloorPassOpen(serviceOrder);
+    const pass = await this.currentFloorPass(serviceOrder);
+    const finished = await this.finishedFloorItemIds(serviceOrder, pass);
+    return this.presentFloorItems(serviceOrder, pass.items, finished);
+  }
+
+  async finishFloorItem(tenantId: string, serviceOrderId: string, serviceOrderItemId: string, actorUserId: string) {
+    const serviceOrder = await this.getById(serviceOrderId, tenantId);
+    this.assertFloorPassOpen(serviceOrder);
+    if (serviceOrder.floorHolderUserId && serviceOrder.floorHolderUserId !== actorUserId) {
+      throw new DomainValidationError('Esta OP já está com outro técnico.');
+    }
+    const pass = await this.currentFloorPass(serviceOrder);
+    const item = pass.items.find((row) => row.id === serviceOrderItemId);
+    if (!item) {
+      throw new DomainValidationError('Este item não está nesta passada da OP.');
+    }
+    const finished = await this.finishedFloorItemIds(serviceOrder, pass);
+    if (finished.has(item.id)) {
+      const released = pass.items.every((row) => finished.has(row.id));
+      if (released) {
+        await this.closeFloorPass(serviceOrder, actorUserId, pass.finishAction);
+        return {
+          ...this.presentFloorItems(
+            { ...serviceOrder, status: floorActionResultStatus(pass.finishAction) },
+            pass.items,
+            finished,
+          ),
+          released: true,
+          minutes: 0,
+        };
+      }
+      throw new DomainValidationError('Este item já foi terminado.');
+    }
+    const previous = await this.floorClockStart(serviceOrder, pass, finished);
+    const finishedAt = new Date();
+    const minutes = measuredExecutionMinutes(previous, finishedAt, Number(item.quantity));
+    await this.recordFloorItemFinish(serviceOrder, actorUserId, item.id, pass.versionId, finishedAt);
+    finished.add(item.id);
+    if (item.productId && item.serviceId) {
+      try {
+        const price = await this.atelierCatalogService.findActiveProductService(tenantId, item.productId, item.serviceId);
+        if (price) {
+          await this.atelierCatalogService.updateProductService(price.id, {
+            tenantId,
+            estimatedMinutes: minutes,
+            actorUserId,
+          });
+        }
+      } catch {
+        // O item já foi terminado. O cadastro do preço entra de novo na próxima execução.
+      }
+    }
+    const released = pass.items.every((row) => finished.has(row.id));
+    if (released) {
+      await this.closeFloorPass(serviceOrder, actorUserId, pass.finishAction);
+    }
+    const view = this.presentFloorItems(
+      released ? { ...serviceOrder, status: floorActionResultStatus(pass.finishAction) } : serviceOrder,
+      pass.items,
+      finished,
+    );
+    return { ...view, released, minutes };
+  }
+
+  private assertFloorPassOpen(serviceOrder: ServiceOrderEntity) {
+    if (serviceOrder.status !== ServiceOrderStatus.IN_PRODUCTION && serviceOrder.status !== ServiceOrderStatus.IN_REWORK) {
+      throw new DomainValidationError('Pegue a sacola antes de terminar os itens.');
+    }
+  }
+
+  private presentFloorItems(
+    serviceOrder: Pick<ServiceOrderEntity, 'id' | 'orderNo' | 'status'>,
+    items: ServiceOrderItemEntity[],
+    finished: Set<string>,
+  ) {
+    return {
+      serviceOrderId: serviceOrder.id,
+      orderNo: serviceOrder.orderNo,
+      status: serviceOrder.status,
+      items: items.map((item) => ({
+        id: item.id,
+        itemNo: item.itemNo,
+        itemType: item.itemType,
+        description: item.description,
+        complement: item.complement,
+        finished: finished.has(item.id),
+      })),
+    };
+  }
+
+  private async currentFloorPass(serviceOrder: ServiceOrderEntity): Promise<{
+    versionId: string | null;
+    pickAction: 'pick_up' | 'pick_up_rework';
+    finishAction: 'finish_production' | 'finish_rework';
+    items: ServiceOrderItemEntity[];
+  }> {
+    const items = await this.serviceOrderItemRepository.findByServiceOrder(serviceOrder.id);
+    if (items.length === 0) {
+      throw new DomainValidationError('Esta OP não tem itens para terminar.');
+    }
+    if (serviceOrder.status !== ServiceOrderStatus.IN_REWORK) {
+      return { versionId: null, pickAction: 'pick_up', finishAction: 'finish_production', items };
+    }
+    const target = await this.activeReworkTarget(serviceOrder.tenantId, serviceOrder.id);
+    const selected = target.itemIds.length > 0 ? items.filter((item) => target.itemIds.includes(item.id)) : items;
+    if (selected.length === 0) {
+      throw new DomainValidationError('Esta OP não tem itens para terminar.');
+    }
+    return {
+      versionId: target.versionId,
+      pickAction: 'pick_up_rework',
+      finishAction: 'finish_rework',
+      items: selected,
+    };
+  }
+
+  private async activeReworkTarget(tenantId: string, serviceOrderId: string): Promise<{ versionId: string | null; itemIds: string[] }> {
+    if (typeof this.dataSource?.query !== 'function') {
+      return { versionId: null, itemIds: [] };
+    }
+    const rows = (await this.dataSource.query(
+      `SELECT v.id, v.affected_service_order_item_ids AS items
+         FROM production_orders po
+         JOIN production_order_versions v
+           ON v.production_order_id = po.id
+          AND v.is_active = true
+          AND v.version_reason IN ('rework', 'warranty_execution', 'corrective_production')
+        WHERE po.tenant_id = $1
+          AND po.service_order_id = $2
+          AND po.is_deleted = false
+        ORDER BY v.version_no DESC
+        LIMIT 1`,
+      [tenantId, serviceOrderId],
+    )) as Array<{ id?: string; items?: unknown }>;
+    return { versionId: rows[0]?.id ?? null, itemIds: this.readItemIdList(rows[0]?.items) };
+  }
+
+  private readItemIdList(value: unknown): string[] {
+    const parsed = typeof value === 'string' ? this.parseItemIdList(value) : value;
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  }
+
+  private parseItemIdList(value: string): unknown {
+    try {
+      return JSON.parse(value) as unknown;
+    } catch {
+      return [];
+    }
+  }
+
+  private async floorClockStart(
+    serviceOrder: ServiceOrderEntity,
+    pass: { versionId: string | null; pickAction: string },
+    finished: Set<string>,
+  ): Promise<Date> {
+    const picks = await this.floorDiaryMoments(serviceOrder, pass.pickAction, pass.versionId, null);
+    const finishes = await this.floorDiaryMoments(serviceOrder, 'finish_item', pass.versionId, finished);
+    const latestFinish = finishes.at(-1) ?? null;
+    return latestFinish ?? picks.at(-1) ?? serviceOrder.updatedAt ?? new Date();
+  }
+
+  private async finishedFloorItemIds(
+    serviceOrder: ServiceOrderEntity,
+    pass: { versionId: string | null; pickAction: string },
+  ): Promise<Set<string>> {
+    const picks = await this.floorDiaryMoments(serviceOrder, pass.pickAction, pass.versionId, null);
+    const anchor = picks.at(-1) ?? null;
+    const rows = await this.floorDiaryRows(serviceOrder, 'finish_item', pass.versionId);
+    const ids = new Set<string>();
+    for (const row of rows) {
+      if (!row.itemId) continue;
+      if (anchor && new Date(row.happenedAt).getTime() < anchor.getTime()) continue;
+      ids.add(row.itemId);
+    }
+    return ids;
+  }
+
+  private async floorDiaryMoments(
+    serviceOrder: ServiceOrderEntity,
+    action: string,
+    versionId: string | null,
+    onlyItems: Set<string> | null,
+  ): Promise<Date[]> {
+    const rows = await this.floorDiaryRows(serviceOrder, action, versionId);
+    return rows
+      .filter((row) => !onlyItems || (row.itemId !== null && onlyItems.has(row.itemId)))
+      .map((row) => new Date(row.happenedAt))
+      .filter((date) => !Number.isNaN(date.getTime()))
+      .sort((left, right) => left.getTime() - right.getTime());
+  }
+
+  private async floorDiaryRows(
+    serviceOrder: ServiceOrderEntity,
+    action: string,
+    versionId: string | null,
+  ): Promise<Array<{ itemId: string | null; happenedAt: Date | string }>> {
+    if (typeof this.dataSource?.query !== 'function') {
+      return [];
+    }
+    return (await this.dataSource.query(
+      `SELECT service_order_item_id AS "itemId", happened_at AS "happenedAt"
+         FROM floor_diary_entries
+        WHERE tenant_id = $1
+          AND service_order_id = $2
+          AND action = $3
+          AND ($4::uuid IS NULL OR production_order_version_id = $4 OR production_order_version_id IS NULL)
+        ORDER BY happened_at ASC`,
+      [serviceOrder.tenantId, serviceOrder.id, action, versionId],
+    )) as Array<{ itemId: string | null; happenedAt: Date | string }>;
+  }
+
+  private async recordFloorItemFinish(
+    order: ServiceOrderEntity,
+    actorUserId: string,
+    serviceOrderItemId: string,
+    versionId: string | null,
+    happenedAt: Date,
+  ) {
+    if (typeof this.dataSource.query !== 'function') {
+      return;
+    }
+    await this.dataSource.query(
+      `INSERT INTO floor_diary_entries (
+         id, tenant_id, branch_id, user_id, service_order_id, order_no, action, happened_at, production_order_version_id, service_order_item_id
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, 'finish_item', $7, $8, $9)`,
+      [randomUUID(), order.tenantId, order.branchId, actorUserId, order.id, order.orderNo, happenedAt.toISOString(), versionId, serviceOrderItemId],
+    );
+  }
+
+  private async closeFloorPass(
+    serviceOrder: ServiceOrderEntity,
+    actorUserId: string,
+    action: 'finish_production' | 'finish_rework',
+  ) {
+    serviceOrder.floorHolderUserId = null;
+    serviceOrder.status = floorActionResultStatus(action);
+    serviceOrder.updatedBy = actorUserId;
+    const saved = await this.serviceOrderRepository.save(serviceOrder);
+    await this.auditService.record({
+      tenantId: saved.tenantId,
+      branchId: saved.branchId,
+      actorUserId,
+      entityType: 'service_order',
+      entityId: saved.id,
+      action: floorActionAudit(action),
+      eventType: 'service_order.workflow',
+      metadata: { status: saved.status, floorAction: action },
+    });
+    await this.recordFloorDiary(saved, actorUserId, action);
+    return saved;
   }
 
   async isReworkWaitingOnBelt(tenantId: string, serviceOrderId: string): Promise<boolean> {
