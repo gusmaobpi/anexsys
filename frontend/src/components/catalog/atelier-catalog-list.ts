@@ -19,6 +19,13 @@ export type AtelierCatalogRecord = {
   sortOrder: number;
   status: "active" | "inactive";
   difficultyGrade?: number | null;
+  fiscalCode?: string | null;
+  nationalNfseCode?: string | null;
+  municipalCode?: string | null;
+  issRate?: string | null;
+  issWithheld?: boolean;
+  operationNature?: string | null;
+  fiscalDescription?: string | null;
 };
 
 export function atelierCatalogStatusLabel(status: AtelierCatalogRecord["status"]) {

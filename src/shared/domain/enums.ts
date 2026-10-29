@@ -296,6 +296,9 @@ export enum PaymentProviderName {
 export enum FiscalDocumentType {
   NFSE = 'nfse',
   NFE = 'nfe',
+  NFCE = 'nfce',
+  CTE = 'cte',
+  MDFE = 'mdfe',
   CREDIT_DOCUMENT = 'credit_document',
   DEBIT_DOCUMENT = 'debit_document',
 }

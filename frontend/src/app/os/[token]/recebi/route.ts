@@ -6,6 +6,7 @@ export async function POST(request: Request, context: { params: Promise<{ token:
   const { token } = await readRouteToken(context.params);
   return proxyPublicOsRequest(token, {
     method: "POST",
+    action: "recebi",
     headers: {
       Accept: "application/json",
       "content-type": "application/json",

@@ -197,6 +197,19 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    title: "Fiscal",
+    items: [
+      { href: "/fiscal/settings", label: "Configuração Fiscal", hint: "Empresa, filial e parâmetros da NFS-e", requiredPermissions: ["fiscal.admin"] },
+      { href: "/fiscal/certificates", label: "Certificados Digitais", hint: "Certificado A1 da filial", requiredPermissions: ["fiscal.admin"] },
+      { href: "/fiscal/environments", label: "Ambientes", hint: "Homologação e produção", requiredPermissions: ["fiscal.admin"] },
+      { href: "/fiscal/batch", label: "Emissão em Lote", hint: "Uma nota por OS ou consolidada por cliente", requiredPermissions: ["fiscal.write"] },
+      { href: "/fiscal/history", label: "Histórico Fiscal", hint: "Notas, XML e PDF", requiredPermissions: ["fiscal.read"] },
+      { href: "/fiscal/cancellations", label: "Cancelamento Fiscal", hint: "Cancela a nota já emitida", requiredPermissions: ["fiscal.write"] },
+      { href: "/fiscal/pending", label: "Pendências Fiscais", hint: "Erros para corrigir e reprocessar", requiredPermissions: ["fiscal.read"] },
+      { href: "/fiscal/audit", label: "Auditoria Fiscal", hint: "Quem emitiu, cancelou e alterou", requiredPermissions: ["fiscal.audit"] },
+    ],
+  },
+  {
     title: "Integração",
     items: [
       {

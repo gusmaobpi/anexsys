@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { DataSource, QueryFailedError } from 'typeorm';
 import { AuditService } from 'src/modules/audit/application/audit/audit.service';
 import { BranchService } from 'src/modules/branch/application/branch/branch.service';
+import { CompanyService } from 'src/modules/company/application/company/company.service';
 import { CustomerService } from 'src/modules/crm/application/customer/customer.service';
 import { MeasurementService } from 'src/modules/crm/application/measurement/measurement.service';
 import { IdentityService } from 'src/modules/identity/application/identity/identity.service';
@@ -47,6 +48,8 @@ import {
 import {
   APPROVAL_ACCEPTED_TEXT,
   APPROVAL_RELEASE_TEXT,
+  LINK_ACCEPTANCE_TEXT,
+  PUBLIC_PRIVACY_NOTICE,
   buildApprovalMeasurementsSnapshot,
   buildApprovalServicesSnapshot,
   canRecordApproval,
@@ -129,6 +132,8 @@ export class ServiceOrderService {
     private readonly measurementService: MeasurementService,
     @Inject(ServiceOrderApprovalRepository)
     private readonly approvalRepository: ServiceOrderApprovalRepository,
+    @Inject(CompanyService)
+    private readonly companyService: CompanyService,
   ) {}
 
   async create(dto: CreateServiceOrderDto): Promise<{ serviceOrder: ServiceOrderEntity; items: ServiceOrderItemEntity[] }> {
@@ -507,6 +512,9 @@ export class ServiceOrderService {
         this.tenantService.getById(serviceOrder.tenantId),
       ]);
       const pickup = await this.buildPickupSummary(serviceOrder, customer.phone ?? null);
+      const signature = await this.findLatestApprovalSignature(serviceOrder.id);
+      const agreed = Boolean(signature && isCustomerSignatureMethod(signature.method));
+      const brand = await this.readPublicBrand(serviceOrder);
       return {
         orderNo: serviceOrder.orderNo,
         companyName: tenant.displayName || tenant.legalName,
@@ -525,7 +533,29 @@ export class ServiceOrderService {
         pickedUp: serviceOrder.status === ServiceOrderStatus.PICKED_UP,
         pickupMethod: pickup?.method ?? null,
         paymentLabel: await this.readPublicPaymentLabel(serviceOrder),
+        agreed,
+        agreedAt: agreed ? signature?.confirmedAt ?? null : null,
+        termsText: LINK_ACCEPTANCE_TEXT,
+        privacyNotice: PUBLIC_PRIVACY_NOTICE,
+        logo: brand.logo,
+        attendantName: brand.attendantName,
+        attendantPortrait: brand.attendantPortrait,
       };
+    });
+  }
+
+  async confirmPublicConcordo(
+    publicToken: string,
+    evidence?: { userAgent?: string | null; ip?: string | null },
+  ) {
+    return TenantContext.run({ tenantId: null, bypass: true }, async () => {
+      const serviceOrder = await this.loadPublicServiceOrder(publicToken);
+      await this.completeApproval(serviceOrder.tenantId, serviceOrder.id, serviceOrder.commercialResponsibleActorId, {
+        method: 'link',
+        userAgent: evidence?.userAgent,
+        ip: evidence?.ip,
+      });
+      return this.getPublicTrackingView(publicToken);
     });
   }
 
@@ -538,6 +568,38 @@ export class ServiceOrderService {
       await this.confirmPickupFromLink(serviceOrder.tenantId, serviceOrder.id, evidence);
       return this.getPublicTrackingView(publicToken);
     });
+  }
+
+  private async readPublicBrand(serviceOrder: { branchId?: string | null; tenantId: string; commercialResponsibleActorId?: string | null }) {
+    let logo: { mimeType: string; contentBase64: string } | null = null;
+    let attendantName: string | null = null;
+    let attendantPortrait: { mimeType: string; contentBase64: string } | null = null;
+    if (serviceOrder.branchId && this.branchService?.getById && this.companyService?.getById) {
+      try {
+        const branch = await this.branchService.getById(serviceOrder.branchId);
+        if (branch?.companyId) {
+          const company = await this.companyService.getById(branch.companyId, serviceOrder.tenantId);
+          if (company.logoBase64 && company.logoMimeType) {
+            logo = { mimeType: company.logoMimeType, contentBase64: company.logoBase64 };
+          }
+        }
+      } catch {
+        logo = null;
+      }
+    }
+    if (serviceOrder.commercialResponsibleActorId && this.identityService?.getById) {
+      try {
+        const attendant = await this.identityService.getById(serviceOrder.commercialResponsibleActorId);
+        attendantName = attendant.displayName?.trim() || null;
+        if (attendant.portraitBase64 && attendant.portraitMimeType) {
+          attendantPortrait = { mimeType: attendant.portraitMimeType, contentBase64: attendant.portraitBase64 };
+        }
+      } catch {
+        attendantName = null;
+        attendantPortrait = null;
+      }
+    }
+    return { logo, attendantName, attendantPortrait };
   }
 
   private async loadPublicServiceOrder(publicToken: string) {
@@ -1080,7 +1142,12 @@ export class ServiceOrderService {
         serviceOrderId: serviceOrder.id,
         method: input.method,
         confirmedAt: now,
-        acceptedText: input.method === 'release' ? APPROVAL_RELEASE_TEXT : APPROVAL_ACCEPTED_TEXT,
+        acceptedText:
+          input.method === 'release'
+            ? APPROVAL_RELEASE_TEXT
+            : input.method === 'link'
+              ? LINK_ACCEPTANCE_TEXT
+              : APPROVAL_ACCEPTED_TEXT,
         releaseReason,
         totalValueSnapshot: serviceOrder.totalValue,
         discountValueSnapshot: serviceOrder.discountValue,

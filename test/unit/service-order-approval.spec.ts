@@ -24,7 +24,8 @@ test('approval is a signature, not a status change', () => {
   assert.equal(canRecordApproval('picked_up'), false);
   assert.equal(isCustomerSignatureMethod('counter'), true);
   assert.equal(isCustomerSignatureMethod('paper'), true);
-  assert.equal(isCustomerSignatureMethod('release'), false);
+  assert.equal(isCustomerSignatureMethod('link'), true);
+  assert.equal(approvalMethodLabel('link'), 'Link do cliente');
   assert.equal(APPROVAL_ACCEPTED_TEXT, 'Concordo com o serviço e o preço.');
   assert.equal(APPROVAL_RELEASE_TEXT, 'Produção liberada sem assinatura do cliente.');
   assert.equal(approvalMethodLabel('counter'), 'Balcão');

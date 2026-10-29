@@ -58,6 +58,12 @@ export class CompanyEntity extends SoftDeletableBusinessEntity {
   @Column({ name: 'country', type: 'text', nullable: true })
   country!: string | null;
 
+  @Column({ name: 'logo_mime_type', type: 'varchar', length: 30, nullable: true })
+  logoMimeType!: string | null;
+
+  @Column({ name: 'logo_base64', type: 'text', nullable: true })
+  logoBase64!: string | null;
+
   @Column({ name: 'is_default', type: 'boolean', default: false })
   isDefault!: boolean;
 

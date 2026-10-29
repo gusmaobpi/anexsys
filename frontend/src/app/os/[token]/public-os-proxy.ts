@@ -4,9 +4,13 @@ export function publicOsBackendUrl(token: string, suffix = "") {
   return `${backendOrigin}/api/v1/public/service-orders/${encodeURIComponent(token)}${suffix}`;
 }
 
-export async function proxyPublicOsRequest(token: string, init?: RequestInit): Promise<Response> {
+export async function proxyPublicOsRequest(
+  token: string,
+  init?: RequestInit & { action?: "recebi" | "concordo" },
+): Promise<Response> {
+  const suffix = init?.action ? `/${init.action}` : "";
   try {
-    const response = await fetch(publicOsBackendUrl(token, init?.method === "POST" ? "/recebi" : ""), {
+    const response = await fetch(publicOsBackendUrl(token, suffix), {
       method: init?.method ?? "GET",
       headers: { Accept: "application/json", ...(init?.headers ?? {}) },
       cache: "no-store",

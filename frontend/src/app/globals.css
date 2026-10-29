@@ -746,6 +746,92 @@ textarea {
   min-height: 48px;
 }
 
+.brand-field {
+  display: grid;
+  gap: 8px;
+}
+
+.brand-field > span {
+  font-weight: 700;
+}
+
+.brand-field input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.brand-frame--logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 72px;
+  margin: 0 0 14px;
+  padding: 8px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.brand-frame--logo img {
+  display: block;
+  max-width: 100%;
+  max-height: 56px;
+  object-fit: contain;
+}
+
+.brand-frame--portrait {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex: none;
+  border: 1px solid rgba(15, 76, 92, 0.18);
+  background: #f4f7f8;
+  color: #0f4c5c;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.brand-frame--portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.brand-frame__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.brand-frame__pick.is-disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.public-os__attendant {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.public-os .brand-frame--logo {
+  margin-bottom: 16px;
+}
+
 @media (max-width: 640px) {
   .public-os-shell {
     padding: 12px;

@@ -183,7 +183,11 @@ export class AuthService {
     }
 
     if (!this.tokenFactoryService.compareTokenHash(dto.refreshToken, session.refreshTokenHash)) {
-      await this.revokeRefreshSession(session, payload.sub);
+      const rotatedAt = session.lastUsedAt?.getTime() ?? 0;
+      const rotatedJustNow = Date.now() - rotatedAt < 30_000;
+      if (!rotatedJustNow) {
+        await this.revokeRefreshSession(session, payload.sub);
+      }
       throw new AuthenticationFailedError('Refresh token is invalid.');
     }
 

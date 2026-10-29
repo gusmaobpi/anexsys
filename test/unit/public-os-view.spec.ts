@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   describePublicOsError,
+  publicAttendantFirstName,
+  publicAttendantInitials,
+  publicOsAgreement,
   publicOsCta,
   toPublicOsPrintView,
 } from '../../frontend/src/components/service-orders/public-os-view';
@@ -41,6 +44,19 @@ test('maps the public OS payload onto the printed service order', () => {
   assert.equal(printView.customer.legalName, 'Sandra Legramanti');
   assert.equal(printView.statusLabel, 'Em produção');
   assert.equal(printView.items[0].unitPrice, '90.00');
+});
+
+test('the attendant frame uses the first name and initials', () => {
+  assert.equal(publicAttendantFirstName('Ana Souza'), 'Ana');
+  assert.equal(publicAttendantInitials('Ana Souza'), 'AS');
+  assert.equal(publicAttendantInitials('Ana'), 'A');
+  assert.equal(publicAttendantInitials(''), '');
+});
+
+test('the public form offers Concordo until the customer accepts', () => {
+  assert.equal(publicOsAgreement({ agreed: false, status: 'open' }), 'concordo');
+  assert.equal(publicOsAgreement({ agreed: true, status: 'open' }), 'agreed');
+  assert.equal(publicOsAgreement({ agreed: false, status: 'picked_up' }), null);
 });
 
 test('the public micro-form only enables Recebi while the counter window is open', () => {

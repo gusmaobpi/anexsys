@@ -107,6 +107,18 @@ class CompanyFiscalBody {
   @IsString()
   @MaxLength(80)
   country?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(40)
+  logoMimeType?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(300_000)
+  logoBase64?: string | null;
 }
 
 class CreateCompanyBody extends CompanyFiscalBody {

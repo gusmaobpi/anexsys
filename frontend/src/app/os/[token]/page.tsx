@@ -6,6 +6,9 @@ import { printServiceOrderDocument } from "@/components/service-orders/os-docume
 import {
   describePublicOsError,
   formatPublicOsDate,
+  publicAttendantFirstName,
+  publicAttendantInitials,
+  publicOsAgreement,
   publicOsCta,
   toPublicOsPrintView,
   type PublicOsTrackingView,
@@ -45,6 +48,7 @@ export default function PublicOsPage() {
   const [view, setView] = useState<PublicOsTrackingView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) {
@@ -65,7 +69,24 @@ export default function PublicOsPage() {
 
   const printView = useMemo(() => (view ? toPublicOsPrintView(view) : null), [view]);
   const cta = view ? publicOsCta(view) : null;
+  const agreement = view ? publicOsAgreement(view) : null;
   const total = view ? money(view.totalValue) : null;
+
+  useEffect(() => {
+    setPreview(new URLSearchParams(window.location.search).get("preview") === "1");
+  }, []);
+
+  async function confirmConcordo() {
+    setSaving(true);
+    try {
+      setView(await publicJson<PublicOsTrackingView>(`/os/${token}/concordo`, { method: "POST" }));
+      setError(null);
+    } catch (confirmError) {
+      setError(describePublicOsError(confirmError));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function confirmRecebi() {
     setSaving(true);
@@ -87,13 +108,35 @@ export default function PublicOsPage() {
         {view ? (
           <>
             <div className="auth-card__header">
+              {view.logo?.contentBase64 ? (
+                <div className="brand-frame brand-frame--logo">
+                  <img alt={view.companyName} src={`data:${view.logo.mimeType};base64,${view.logo.contentBase64}`} />
+                </div>
+              ) : null}
               <div className="eyebrow">{view.companyName}</div>
               <h1 className="title">Olá, {view.customerFirstName}</h1>
               <p className="subtitle">
                 OS <strong>{view.orderNo}</strong>. Não compartilhe este link.
               </p>
+              {view.attendantName ? (
+                <div className="public-os__attendant">
+                  <div className="brand-frame brand-frame--portrait">
+                    {view.attendantPortrait?.contentBase64 ? (
+                      <img alt="" src={`data:${view.attendantPortrait.mimeType};base64,${view.attendantPortrait.contentBase64}`} />
+                    ) : (
+                      <span>{publicAttendantInitials(view.attendantName)}</span>
+                    )}
+                  </div>
+                  <span>Atendimento {publicAttendantFirstName(view.attendantName)}</span>
+                </div>
+              ) : null}
             </div>
             <div className="auth-card__body">
+              {preview ? (
+                <p className="os-rule-banner">
+                  Este é o formulário que o cliente abre no celular. O texto jurídico ainda pode ser ajustado. O WhatsApp entra quando a Meta liberar o número.
+                </p>
+              ) : null}
               <p className="public-os__status">{view.statusLabel}</p>
               <p className="table-subtle">
                 Entrada {formatPublicOsDate(view.openedAt)} · Previsão {formatPublicOsDate(view.promisedDeliveryDate)}
@@ -115,6 +158,20 @@ export default function PublicOsPage() {
                 })}
               </ul>
               {total ? <p className="public-os__total">Total {total}</p> : null}
+              {view.privacyNotice ? <p className="table-subtle">{view.privacyNotice}</p> : null}
+              {agreement === "agreed" ? (
+                <p className="os-rule-banner">
+                  Aceite registrado{view.agreedAt ? ` em ${formatPublicOsDate(view.agreedAt)}` : ""}.
+                </p>
+              ) : null}
+              {agreement === "concordo" ? (
+                <>
+                  <p className="table-subtle">{view.termsText}</p>
+                  <button className="button public-os__cta" disabled={saving} onClick={() => void confirmConcordo()} type="button">
+                    {saving ? "Registrando…" : "Concordo"}
+                  </button>
+                </>
+              ) : null}
               {cta === "picked_up" ? <p className="os-rule-banner">Retirada confirmada. Obrigada.</p> : null}
               {cta === "recebi" ? (
                 <button className="button public-os__cta" disabled={saving} onClick={() => void confirmRecebi()} type="button">

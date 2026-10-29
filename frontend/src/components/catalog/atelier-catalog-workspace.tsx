@@ -24,6 +24,13 @@ type CatalogForm = {
   defaultPrice: string;
   sortOrder: string;
   difficultyGrade: string;
+  fiscalCode: string;
+  nationalNfseCode: string;
+  municipalCode: string;
+  issRate: string;
+  issWithheld: boolean;
+  operationNature: string;
+  fiscalDescription: string;
 };
 
 type Props = {
@@ -35,7 +42,27 @@ const emptyForm = (): CatalogForm => ({
   defaultPrice: "",
   sortOrder: "0",
   difficultyGrade: "",
+  fiscalCode: "",
+  nationalNfseCode: "",
+  municipalCode: "",
+  issRate: "",
+  issWithheld: false,
+  operationNature: "",
+  fiscalDescription: "",
 });
+
+function fiscalPayload(form: CatalogForm) {
+  return {
+    difficultyGrade: form.difficultyGrade ? Number(form.difficultyGrade) : null,
+    fiscalCode: form.fiscalCode || null,
+    nationalNfseCode: form.nationalNfseCode || null,
+    municipalCode: form.municipalCode || null,
+    issRate: form.issRate.trim() ? Number(form.issRate.replace(",", ".")) : null,
+    issWithheld: form.issWithheld,
+    operationNature: form.operationNature || null,
+    fiscalDescription: form.fiscalDescription || null,
+  };
+}
 
 function toListRecord(record: {
   id: string;
@@ -45,6 +72,13 @@ function toListRecord(record: {
   sortOrder: number;
   status?: "active" | "inactive";
   difficultyGrade?: number | null;
+  fiscalCode?: string | null;
+  nationalNfseCode?: string | null;
+  municipalCode?: string | null;
+  issRate?: string | null;
+  issWithheld?: boolean;
+  operationNature?: string | null;
+  fiscalDescription?: string | null;
 }): AtelierCatalogRecord {
   return {
     id: record.id,
@@ -54,6 +88,13 @@ function toListRecord(record: {
     sortOrder: record.sortOrder,
     status: record.status === "inactive" ? "inactive" : "active",
     difficultyGrade: record.difficultyGrade ?? null,
+    fiscalCode: record.fiscalCode ?? null,
+    nationalNfseCode: record.nationalNfseCode ?? null,
+    municipalCode: record.municipalCode ?? null,
+    issRate: record.issRate ?? null,
+    issWithheld: Boolean(record.issWithheld),
+    operationNature: record.operationNature ?? null,
+    fiscalDescription: record.fiscalDescription ?? null,
   };
 }
 
@@ -345,6 +386,13 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
       defaultPrice: record.defaultPrice ?? "",
       sortOrder: String(record.sortOrder ?? 0),
       difficultyGrade: record.difficultyGrade ? String(record.difficultyGrade) : "",
+      fiscalCode: record.fiscalCode ?? "",
+      nationalNfseCode: record.nationalNfseCode ?? "",
+      municipalCode: record.municipalCode ?? "",
+      issRate: record.issRate ?? "",
+      issWithheld: Boolean(record.issWithheld),
+      operationNature: record.operationNature ?? "",
+      fiscalDescription: record.fiscalDescription ?? "",
     });
     clearDuplicate();
   }, [clearDuplicate, focusRecordId, records, setForm, workspaceMode]);
@@ -370,7 +418,7 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
         body: JSON.stringify({
           displayName: form.displayName,
           sortOrder: Number(form.sortOrder || 0),
-          ...(mode === "services" ? { difficultyGrade: form.difficultyGrade ? Number(form.difficultyGrade) : null } : {}),
+          ...(mode === "services" ? fiscalPayload(form) : {}),
         }),
       });
       const mapped = toListRecord(created);
@@ -407,7 +455,7 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
         body: JSON.stringify({
           displayName: form.displayName,
           sortOrder: Number(form.sortOrder || 0),
-          ...(mode === "services" ? { difficultyGrade: form.difficultyGrade ? Number(form.difficultyGrade) : null } : {}),
+          ...(mode === "services" ? fiscalPayload(form) : {}),
         }),
       });
       const mapped = toListRecord(updated);
@@ -575,6 +623,17 @@ export function AtelierCatalogWorkspace({ mode }: Props) {
                     <option value="4">4</option>
                   </select>
                 </label>
+              ) : null}
+              {mode === "services" ? (
+                <>
+                  <label className="field"><span>Código Fiscal</span><input value={form.fiscalCode} onChange={(event) => setForm((current) => ({ ...current, fiscalCode: event.target.value }))} /></label>
+                  <label className="field"><span>Código Nacional NFS-e</span><input value={form.nationalNfseCode} onChange={(event) => setForm((current) => ({ ...current, nationalNfseCode: event.target.value }))} /></label>
+                  <label className="field"><span>Código Municipal</span><input value={form.municipalCode} onChange={(event) => setForm((current) => ({ ...current, municipalCode: event.target.value }))} /></label>
+                  <label className="field"><span>Alíquota ISS</span><input inputMode="decimal" value={form.issRate} onChange={(event) => setForm((current) => ({ ...current, issRate: event.target.value }))} /></label>
+                  <label className="field"><span>ISS Retido</span><select value={form.issWithheld ? "yes" : "no"} onChange={(event) => setForm((current) => ({ ...current, issWithheld: event.target.value === "yes" }))}><option value="no">Não</option><option value="yes">Sim</option></select></label>
+                  <label className="field"><span>Natureza da Operação</span><input value={form.operationNature} onChange={(event) => setForm((current) => ({ ...current, operationNature: event.target.value }))} /></label>
+                  <label className="field"><span>Descrição Fiscal</span><textarea value={form.fiscalDescription} onChange={(event) => setForm((current) => ({ ...current, fiscalDescription: event.target.value }))} /></label>
+                </>
               ) : null}
               <div className="button-row">
                 <button className="button" disabled={saving || duplicateStatus !== "idle"} type="submit">

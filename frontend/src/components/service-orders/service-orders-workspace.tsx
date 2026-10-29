@@ -370,10 +370,16 @@ export function ServiceOrdersWorkspace() {
   const canReadFinance = hasAnyPermission("finance.read");
   const canWriteFinance = hasAnyPermission("finance.write");
   const canRefund = hasAnyPermission("finance.refund");
+  const canReadFiscal = hasAnyPermission("fiscal.read");
+  const canWriteFiscal = hasAnyPermission("fiscal.write");
   const canReadProduction = hasAnyPermission("production_orders.read");
   const canWriteProduction = hasAnyPermission("production_orders.write");
   const canWriteProof = canWrite || canWriteProduction;
   const [orders, setOrders] = useState<ServiceOrderRecord[]>([]);
+  const [fiscalMarks, setFiscalMarks] = useState<Record<string, { id: string; documentNo: string | null; fiscalStatus: string | null; issuedAt: string | null; blockedReason: string | null }>>({});
+  const [emitTarget, setEmitTarget] = useState<ServiceOrderRecord | null>(null);
+  const [emitPreview, setEmitPreview] = useState<{ blockers: string[]; environment: string | null; customerName: string; total: number } | null>(null);
+  const [emitBusy, setEmitBusy] = useState(false);
   const [customers, setCustomers] = useState<CustomerLookupRecord[]>([]);
   const [products, setProducts] = useState<CatalogLookupRecord[]>([]);
   const [services, setServices] = useState<CatalogLookupRecord[]>([]);
@@ -666,6 +672,15 @@ export function ServiceOrdersWorkspace() {
       try {
         const response = await apiJson<ServiceOrderRecord[]>("/service-orders");
         setOrders(response);
+        if ((canReadFiscal || canWriteFiscal) && response.length > 0) {
+          const marks = await apiJson<Array<{ id: string; documentNo: string | null; fiscalStatus: string | null; issuedAt: string | null; blockedReason: string | null }>>("/fiscal/order-marks", {
+            method: "POST",
+            body: JSON.stringify({ ids: response.map((order) => order.id) }),
+          }).catch(() => []);
+          setFiscalMarks(Object.fromEntries(marks.map((mark) => [mark.id, mark])));
+        } else {
+          setFiscalMarks({});
+        }
         if (binding.bind) {
           setActiveOrderId(binding.activeId);
           if (binding.activeId) {
@@ -688,7 +703,7 @@ export function ServiceOrdersWorkspace() {
         setLoading(false);
       }
     },
-    [apiJson, canRead, setActiveOrderId],
+    [apiJson, canRead, canReadFiscal, canWriteFiscal, setActiveOrderId],
   );
 
   useEffect(() => {
@@ -2077,7 +2092,7 @@ export function ServiceOrdersWorkspace() {
           }}
           buildExcelCsv={buildOsExcelCsv}
           canWrite={canWrite}
-          columnStorageKey="anexsys.frontend.os.grid-columns.v1"
+          columnStorageKey="anexsys.frontend.os.grid-columns.v2"
           columns={[
             {
               id: "name",
@@ -2105,8 +2120,29 @@ export function ServiceOrdersWorkspace() {
               ),
             },
             { id: "value", label: "Valor", render: (row) => row.totalValue ?? "—" },
+            { id: "fiscalNo", label: "Número da Nota", render: (row) => fiscalMarks[row.id]?.documentNo ?? "—" },
+            {
+              id: "fiscalStatus",
+              label: "Situação Fiscal",
+              render: (row) => {
+                const status = fiscalMarks[row.id]?.fiscalStatus;
+                if (status === "issued") return "Emitida";
+                if (status === "cancelled") return "Cancelada";
+                if (status === "error") return "Erro";
+                if (status === "draft") return "Rascunho";
+                return "—";
+              },
+            },
+            {
+              id: "fiscalDate",
+              label: "Data Emissão",
+              render: (row) => {
+                const issuedAt = fiscalMarks[row.id]?.issuedAt;
+                return issuedAt ? new Date(issuedAt).toLocaleString("pt-BR") : "—";
+              },
+            },
           ]}
-          defaultColumnIds={["name", "delivery", "status"]}
+          defaultColumnIds={["name", "delivery", "status", "fiscalNo", "fiscalStatus", "fiscalDate"]}
           emptyFilters={{ name: "", status: "", deliveryType: "", payment: "" }}
           emptyMessage="Nenhuma OS encontrada para os filtros informados."
           excelFileName="ordens-de-servico.csv"
@@ -2163,15 +2199,43 @@ export function ServiceOrdersWorkspace() {
               : undefined
           }
           canPay={(row) => osCanOpenPay(row)}
-          extraActions={(row) => (
-            <OsAnexoButton
-              disabled={Boolean(anexoViewer?.loading)}
-              hasAttachments={Boolean(row.hasAttachments)}
-              onClick={() => {
-                void openAnexoPanel(row);
-              }}
-            />
-          )}
+          extraActions={(row) => {
+            const mark = fiscalMarks[row.id];
+            const emitReason = mark?.documentNo
+              ? "A nota desta OS já foi emitida."
+              : mark?.blockedReason || "A consulta fiscal ainda não voltou.";
+            const canEmit = Boolean(canWriteFiscal && mark && !mark.documentNo && !mark.blockedReason);
+            return (
+              <>
+                <OsAnexoButton
+                  disabled={Boolean(anexoViewer?.loading)}
+                  hasAttachments={Boolean(row.hasAttachments)}
+                  onClick={() => {
+                    void openAnexoPanel(row);
+                  }}
+                />
+                {canWriteFiscal ? (
+                  <button
+                    className="button-secondary"
+                    disabled={!canEmit}
+                    title={canEmit ? "Emitir NFS-e" : emitReason}
+                    type="button"
+                    onClick={() => {
+                      const order = orders.find((item) => item.id === row.id);
+                      if (!order) return;
+                      setEmitTarget(order);
+                      setEmitPreview(null);
+                      void apiJson<{ blockers: string[]; environment: string | null; order: { customerName: string; total: number } }>(`/fiscal/service-orders/${row.id}/preview`)
+                        .then((preview) => setEmitPreview({ blockers: preview.blockers, environment: preview.environment, customerName: preview.order.customerName, total: preview.order.total }))
+                        .catch((error) => setMessage(formatWorkspaceMessage(error, "A pré-visualização da NFS-e não abriu.")));
+                    }}
+                  >
+                    Emitir NFS-e
+                  </button>
+                ) : null}
+              </>
+            );
+          }}
           rowMenu={buildOsRowMenu}
           records={orders}
           rowLabel={(row) => row.orderNo}
@@ -2239,6 +2303,60 @@ export function ServiceOrdersWorkspace() {
         </div>
       ) : null}
 
+      {emitTarget ? (
+        <div aria-labelledby="os-nfse-title" aria-modal="true" className="os-anexo-lightbox" role="dialog">
+          <button aria-label="Fechar emissão" className="os-anexo-lightbox__backdrop" onClick={() => setEmitTarget(null)} type="button" />
+          <div className="os-anexo-lightbox__card">
+            <div className="day-board-card__head">
+              <h2 id="os-nfse-title">Emitir NFS-e · OS {emitTarget.orderNo}</h2>
+              <button className="button-secondary" type="button" onClick={() => setEmitTarget(null)}>Fechar</button>
+            </div>
+            {!emitPreview ? <p>Montando a pré-visualização.</p> : (
+              <>
+                <p>{emitPreview.customerName} · {emitPreview.total.toFixed(2)} · {emitPreview.environment === "production" ? "Produção" : emitPreview.environment === "homologation" ? "Homologação" : "Sem ambiente"}</p>
+                {emitPreview.blockers.length > 0 ? (
+                  <ul>{emitPreview.blockers.map((item) => <li key={item}>{item}</li>)}</ul>
+                ) : (
+                  <p>A emissão entra na fila. A grade atualiza quando o lote termina.</p>
+                )}
+                <div className="button-row">
+                  <button
+                    className="button"
+                    disabled={emitBusy || emitPreview.blockers.length > 0}
+                    type="button"
+                    onClick={() => {
+                      const branchId = emitTarget.branchId || session?.activeBranchId;
+                      if (!branchId) return;
+                      setEmitBusy(true);
+                      void apiJson<{ id: string }>("/fiscal/batches", {
+                        method: "POST",
+                        body: JSON.stringify({ branchId, mode: "per_order", orderIds: [emitTarget.id] }),
+                      }).then((batch) => {
+                        const timer = window.setInterval(() => {
+                          void apiJson<{ status: string; lines: Array<{ message: string | null }> }>(`/fiscal/batches/${batch.id}`).then((view) => {
+                            if (view.status !== "completed") return;
+                            window.clearInterval(timer);
+                            setEmitBusy(false);
+                            setEmitTarget(null);
+                            setMessage(view.lines[0]?.message || "Emissão concluída.");
+                            void loadOrders();
+                          });
+                        }, 1000);
+                      }).catch((error) => {
+                        setEmitBusy(false);
+                        setMessage(formatWorkspaceMessage(error, "A NFS-e não entrou na fila."));
+                      });
+                    }}
+                  >
+                    {emitBusy ? "Na fila…" : "Confirmar emissão"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
         {!isListWorkspace ? (
         <article className="mini-card cadastro-form os-form">
           <div className="workspace-toolbar">
@@ -2258,6 +2376,14 @@ export function ServiceOrdersWorkspace() {
                   Link para colar no WhatsApp Web:{" "}
                   <button className="button-ghost" onClick={() => void copyPublicLink()} type="button">
                     Copiar link
+                  </button>
+                  {" · "}
+                  <button
+                    className="button-ghost"
+                    onClick={() => window.open(`/os/${selectedOrder.publicToken}?preview=1`, "_blank", "noopener,noreferrer")}
+                    type="button"
+                  >
+                    Ver formulário do cliente
                   </button>
                 </p>
               ) : null}

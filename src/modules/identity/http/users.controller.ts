@@ -12,7 +12,7 @@ import {
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
-import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, IsUUID, MinLength, ValidateIf } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import { AuthorizationService } from 'src/modules/authorization/application/authorization/authorization.service';
 import { EmailSettingsService } from 'src/modules/email/application/email-settings.service';
 import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
@@ -37,6 +37,18 @@ class CreateUserBody {
   @IsString()
   @MinLength(8)
   password!: string;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(40)
+  portraitMimeType?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(300_000)
+  portraitBase64?: string | null;
 }
 
 class InviteUserBody {
@@ -89,6 +101,18 @@ class UpdateUserBody {
   @IsOptional()
   @IsEnum(UserStatus)
   status?: UserStatus;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(40)
+  portraitMimeType?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(300_000)
+  portraitBase64?: string | null;
 }
 
 @Controller('users')

@@ -274,4 +274,72 @@ describe('AuthService', () => {
     await service.selectBranch({ sessionId: 'session-1', actorUserId: 'user-1', branchId: 'branch-1' });
     assert.equal(savedPreferences[0]?.lastBranchId, 'branch-1');
   });
+
+  it('keeps the session when a second refresh still carries the token that was just rotated', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const service = createAuthService({
+      userSessionRepository: {
+        async findActiveById() {
+          return {
+            id: 'session-1',
+            tenantId: 'tenant-1',
+            userId: 'user-1',
+            status: 'active',
+            expiresAt: new Date(Date.now() + 60_000),
+            lastUsedAt: new Date(),
+            refreshTokenHash: 'hash:current',
+          };
+        },
+        async save(payload: Record<string, unknown>) {
+          saved.push(payload);
+          return payload;
+        },
+      },
+      tokenFactoryService: {
+        async verifyRefreshToken() {
+          return { tokenType: 'refresh', jti: 'session-1', sub: 'user-1', tenantId: 'tenant-1' };
+        },
+        compareTokenHash() {
+          return false;
+        },
+      },
+    });
+
+    await assert.rejects(() => service.refreshTokens({ refreshToken: 'refresh:previous' }), /Refresh token is invalid/);
+    assert.equal(saved.length, 0);
+  });
+
+  it('revokes the session when an old refresh token returns after the rotation window', async () => {
+    const saved: Array<{ status?: string }> = [];
+    const service = createAuthService({
+      userSessionRepository: {
+        async findActiveById() {
+          return {
+            id: 'session-1',
+            tenantId: 'tenant-1',
+            userId: 'user-1',
+            status: 'active',
+            expiresAt: new Date(Date.now() + 60_000),
+            lastUsedAt: new Date(Date.now() - 60_000),
+            refreshTokenHash: 'hash:current',
+          };
+        },
+        async save(payload: { status?: string }) {
+          saved.push(payload);
+          return payload;
+        },
+      },
+      tokenFactoryService: {
+        async verifyRefreshToken() {
+          return { tokenType: 'refresh', jti: 'session-1', sub: 'user-1', tenantId: 'tenant-1' };
+        },
+        compareTokenHash() {
+          return false;
+        },
+      },
+    });
+
+    await assert.rejects(() => service.refreshTokens({ refreshToken: 'refresh:stolen' }), /Refresh token is invalid/);
+    assert.equal(saved[0]?.status, 'revoked');
+  });
 });

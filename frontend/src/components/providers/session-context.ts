@@ -10,6 +10,19 @@ export function createIdleSessionState(): IdleSessionState {
   };
 }
 
+export function statusFromStoredSession(session: {
+  companySelectionRequired?: boolean;
+  activeBranchId?: string | null;
+}): "company-selection" | "branch-selection" | "authenticated" {
+  if (session.companySelectionRequired) {
+    return "company-selection";
+  }
+  if (!session.activeBranchId) {
+    return "branch-selection";
+  }
+  return "authenticated";
+}
+
 export type EmpresaOption = {
   id: string;
   legalName: string;

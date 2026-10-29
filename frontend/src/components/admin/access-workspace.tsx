@@ -30,6 +30,8 @@ import {
 } from "@/components/ui/master-data-duplicate-guard";
 import { WorkspaceFlash, describeWorkspaceError } from "@/components/ui/workspace-flash";
 import { SmartLookup, type SmartLookupOption } from "@/components/ui/smart-lookup";
+import { BrandFrame } from "@/components/ui/brand-frame";
+import { publicAttendantInitials } from "@/components/service-orders/public-os-view";
 
 type BranchRecord = {
   id: string;
@@ -46,6 +48,8 @@ type UserRecord = {
   defaultBranchId: string | null;
   status: "active" | "invited" | "inactive";
   isMaster?: boolean;
+  portraitMimeType?: string | null;
+  portraitBase64?: string | null;
 };
 
 type RoleRecord = {
@@ -106,6 +110,8 @@ type UserForm = {
   password: string;
   defaultBranchId: string;
   status: "active" | "invited" | "inactive";
+  portraitMimeType: string | null;
+  portraitBase64: string | null;
 };
 
 type RoleForm = {
@@ -137,6 +143,8 @@ const emptyUserForm = (): UserForm => ({
   password: "",
   defaultBranchId: "",
   status: "active",
+  portraitMimeType: null,
+  portraitBase64: null,
 });
 
 const emptyRoleForm = (): RoleForm => ({
@@ -167,6 +175,8 @@ function mapUserToForm(user: UserRecord): UserForm {
     password: "",
     defaultBranchId: user.defaultBranchId ?? "",
     status: user.status,
+    portraitMimeType: user.portraitMimeType ?? null,
+    portraitBase64: user.portraitBase64 ?? null,
   };
 }
 
@@ -829,6 +839,8 @@ export function AccessWorkspace() {
           displayName: userForm.displayName,
           password: userForm.password,
           defaultBranchId: userForm.defaultBranchId || undefined,
+          portraitMimeType: userForm.portraitMimeType,
+          portraitBase64: userForm.portraitBase64,
         }),
       });
       setUsers((current) => [...current, created].sort((left, right) => left.displayName.localeCompare(right.displayName)));
@@ -858,6 +870,8 @@ export function AccessWorkspace() {
           displayName: userForm.displayName,
           defaultBranchId: userForm.defaultBranchId || null,
           status: userForm.status,
+          portraitMimeType: userForm.portraitMimeType,
+          portraitBase64: userForm.portraitBase64,
         }),
       });
       setUsers((current) => current.map((record) => (record.id === updated.id ? updated : record)));
@@ -865,6 +879,27 @@ export function AccessWorkspace() {
       finishAccessSave(intent, "users");
     } catch (error) {
       setMessage(describeWorkspaceError(error, "O usuário não pôde ser atualizado."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSavePortrait() {
+    if (!canWriteUsers || !activeUser) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const updated = await apiJson<UserRecord>(`/users/${activeUser.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          portraitMimeType: userForm.portraitMimeType,
+          portraitBase64: userForm.portraitBase64,
+        }),
+      });
+      setUsers((current) => current.map((record) => (record.id === updated.id ? updated : record)));
+      setMessage("Foto gravada.");
+    } catch (error) {
+      setMessage(describeWorkspaceError(error, "A foto não pôde ser gravada."));
     } finally {
       setSaving(false);
     }
@@ -1287,7 +1322,11 @@ export function AccessWorkspace() {
                     setMessage={setMessage}
                   />
                   <div className="button-row">
-                    {activeUser.isMaster ? null : (
+                    {activeUser.isMaster ? (
+                      <button className="button" disabled={saving || !canWriteUsers} onClick={() => void handleSavePortrait()} type="button">
+                        {saving ? "Gravando…" : "Gravar foto"}
+                      </button>
+                    ) : (
                       <>
                         <button className="button" disabled={saving || !canWriteUsers || userDuplicateStatus !== "idle"} type="submit">
                           {saving ? "Gravando…" : "Gravar"}
@@ -1912,6 +1951,21 @@ function UserFormFields({
         <span>Nome exibido</span>
         <input disabled={locked} required value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} />
       </label>
+      <BrandFrame
+        disabled={saving}
+        fallback={publicAttendantInitials(form.displayName)}
+        hint="Este círculo é o mesmo do formulário que o cliente abre no celular."
+        image={form.portraitBase64 && form.portraitMimeType ? { mimeType: form.portraitMimeType, contentBase64: form.portraitBase64 } : null}
+        kind="portrait"
+        label="Foto"
+        onChange={(image) =>
+          setForm((current) => ({
+            ...current,
+            portraitMimeType: image?.mimeType ?? null,
+            portraitBase64: image?.contentBase64 ?? null,
+          }))
+        }
+      />
       {requirePassword ? (
         <label className="field">
           <span>Senha inicial</span>

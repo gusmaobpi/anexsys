@@ -6,6 +6,7 @@ import {
   branchesOfEmpresa,
   isEmpresaActiveForCombo,
   resolveActiveEmpresaId,
+  statusFromStoredSession,
   type BranchOption,
   type EmpresaOption,
 } from "@/components/providers/session-context";
@@ -219,6 +220,53 @@ async function refreshSession(session: SessionRecord): Promise<SessionRecord> {
   };
 }
 
+let refreshInFlight: { token: string; promise: Promise<SessionRecord> } | null = null;
+
+function refreshSessionOnce(session: SessionRecord): Promise<SessionRecord> {
+  if (refreshInFlight?.token === session.refreshToken) {
+    return refreshInFlight.promise;
+  }
+  const promise = refreshSession(session)
+    .then((next) => {
+      const stored = readStoredSession();
+      if (stored?.refreshToken === session.refreshToken) {
+        writeStoredSession({
+          ...stored,
+          tenantId: next.tenantId,
+          accessToken: next.accessToken,
+          refreshToken: next.refreshToken,
+          sessionId: next.sessionId,
+        });
+      }
+      return next;
+    })
+    .finally(() => {
+      if (refreshInFlight?.promise === promise) {
+        refreshInFlight = null;
+      }
+    });
+  refreshInFlight = { token: session.refreshToken, promise };
+  return promise;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function readRotatedSession(previousRefreshToken: string): Promise<SessionRecord | null> {
+  const started = Date.now();
+  while (Date.now() - started <= 1200) {
+    const stored = readStoredSession();
+    if (stored?.refreshToken && stored.refreshToken !== previousRefreshToken) {
+      return stored;
+    }
+    await wait(100);
+  }
+  return null;
+}
+
 function broadcastSessionExpired(message: string) {
   writeStoredSession(null);
   if (typeof window !== "undefined") {
@@ -343,11 +391,19 @@ async function authenticatedRequest<T>(
     }
 
     if (response.status === 401 && opts.allowRefresh !== false && attempt === 0 && workingSession.refreshToken) {
+      const previousRefreshToken = workingSession.refreshToken;
       try {
-        workingSession = await refreshSession(workingSession);
-      } catch {
-        broadcastSessionExpired(SESSION_EXPIRED_MESSAGE);
-        throw new HttpError(401, SESSION_EXPIRED_MESSAGE);
+        workingSession = await refreshSessionOnce(workingSession);
+      } catch (error) {
+        if (!(error instanceof HttpError) || error.status !== 401) {
+          throw error;
+        }
+        const rotated = await readRotatedSession(previousRefreshToken);
+        if (!rotated) {
+          broadcastSessionExpired(SESSION_EXPIRED_MESSAGE);
+          throw new HttpError(401, SESSION_EXPIRED_MESSAGE);
+        }
+        workingSession = rotated;
       }
       continue;
     }
@@ -518,6 +574,39 @@ export function SessionProvider({ children }: Readonly<{ children: ReactNode }>)
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY) {
+        return;
+      }
+      if (!event.newValue) {
+        sessionRef.current = null;
+        setSession(null);
+        setStatus("anonymous");
+        return;
+      }
+      const stored = readStoredSession();
+      const current = sessionRef.current;
+      if (!stored?.refreshToken || !current || current.refreshToken === stored.refreshToken) {
+        return;
+      }
+      const nextSession = {
+        ...current,
+        tenantId: stored.tenantId,
+        accessToken: stored.accessToken,
+        refreshToken: stored.refreshToken,
+        sessionId: stored.sessionId,
+      };
+      sessionRef.current = nextSession;
+      setSession(nextSession);
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
+  useEffect(() => {
     const existing = readStoredSession();
     restoreAttemptedRef.current = true;
     if (!existing) {
@@ -530,11 +619,16 @@ export function SessionProvider({ children }: Readonly<{ children: ReactNode }>)
 
     sessionRef.current = existing;
     setSession(existing);
+    setStatus(statusFromStoredSession(existing));
     hydrateSession(existing).catch((error: unknown) => {
-      writeStoredSession(null);
-      sessionRef.current = null;
-      setSession(null);
-      setStatus("anonymous");
+      if (error instanceof HttpError && [401, 403].includes(error.status)) {
+        writeStoredSession(null);
+        sessionRef.current = null;
+        setSession(null);
+        setStatus("anonymous");
+        setErrorMessage(error.message || SESSION_EXPIRED_MESSAGE);
+        return;
+      }
       setErrorMessage(error instanceof Error ? error.message : SESSION_RESTORE_FAILED_MESSAGE);
     });
   }, [hydrateSession]);

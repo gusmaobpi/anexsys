@@ -5,6 +5,7 @@ import { AuditService } from 'src/modules/audit/application/audit/audit.service'
 import { BranchService } from 'src/modules/branch/application/branch/branch.service';
 import { TenantService } from 'src/modules/tenant/application/tenant/tenant.service';
 import { PasswordHasherService } from 'src/platform/auth/password-hasher.service';
+import { readBrandImageUpdate } from 'src/shared/brand-image';
 import { SessionStatus, UserStatus } from 'src/shared/domain/enums';
 import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
 import { EntityNotFoundError } from 'src/shared/errors/entity-not-found.error';
@@ -31,6 +32,8 @@ export interface UpdateUserDto {
   displayName?: string;
   defaultBranchId?: string | null;
   status?: UserStatus;
+  portraitMimeType?: string | null;
+  portraitBase64?: string | null;
   actorUserId: string;
 }
 
@@ -77,6 +80,7 @@ export class IdentityService {
       deletedBy: null,
       createdBy: dto.actorUserId,
       updatedBy: dto.actorUserId,
+      ...this.portraitColumns(dto.portraitMimeType, dto.portraitBase64),
     });
     const passwordHash = await this.passwordHasherService.hash(dto.password);
     const credential = this.userCredentialRepository.create({
@@ -248,7 +252,9 @@ export class IdentityService {
 
   async updateUser(id: string, dto: UpdateUserDto): Promise<UserIdentityEntity> {
     const user = await this.getById(id);
-    if (await this.userIsMaster(user.tenantId, user.id)) {
+    const changesProfile =
+      dto.email !== undefined || dto.displayName !== undefined || dto.defaultBranchId !== undefined || dto.status !== undefined;
+    if (changesProfile && (await this.userIsMaster(user.tenantId, user.id))) {
       throw new DomainValidationError('O master só altera a senha.');
     }
     await this.assertTenantBranchConsistency(user.tenantId, dto.defaultBranchId === undefined ? user.defaultBranchId ?? undefined : dto.defaultBranchId ?? undefined);
@@ -272,6 +278,11 @@ export class IdentityService {
     }
     if (dto.status !== undefined) {
       user.status = dto.status;
+    }
+    const portrait = readBrandImageUpdate(dto.portraitMimeType, dto.portraitBase64);
+    if (portrait !== undefined) {
+      user.portraitMimeType = portrait?.mimeType ?? null;
+      user.portraitBase64 = portrait?.contentBase64 ?? null;
     }
     user.updatedBy = dto.actorUserId;
 
@@ -380,6 +391,14 @@ export class IdentityService {
         });
 
     return this.userContextPreferenceRepository.save(preference);
+  }
+
+  private portraitColumns(mimeType?: string | null, contentBase64?: string | null) {
+    const portrait = readBrandImageUpdate(mimeType, contentBase64);
+    if (!portrait) {
+      return { portraitMimeType: null, portraitBase64: null };
+    }
+    return { portraitMimeType: portrait.mimeType, portraitBase64: portrait.contentBase64 };
   }
 
   private async masterUserIds(tenantId: string, userId?: string): Promise<Set<string>> {

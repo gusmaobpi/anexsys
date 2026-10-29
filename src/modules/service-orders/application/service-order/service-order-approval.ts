@@ -4,8 +4,12 @@ export const APPROVAL_PHOTO_MAX_BYTES = 4 * 1024 * 1024;
 export const APPROVAL_PHOTO_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 export const APPROVAL_ACCEPTED_TEXT = 'Concordo com o serviço e o preço.';
 export const APPROVAL_RELEASE_TEXT = 'Produção liberada sem assinatura do cliente.';
+export const LINK_ACCEPTANCE_TEXT =
+  'Concordo com o serviço e o preço desta OS. Aceito a confirmação eletrônica neste link como comprovante. Li o aviso de privacidade.';
+export const PUBLIC_PRIVACY_NOTICE =
+  'O ateliê guarda os dados desta ordem de serviço para executar o serviço, avisar sobre o andamento e cumprir prazos legais. Você pode pedir acesso, correção ou exclusão pelo ateliê. Este texto ainda pode ser ajustado.';
 
-export type ApprovalMethod = 'counter' | 'paper' | 'release';
+export type ApprovalMethod = 'counter' | 'paper' | 'release' | 'link';
 
 export function isCustomerSignatureMethod(method: string | null | undefined): boolean {
   return method === 'counter' || method === 'paper' || method === 'link';

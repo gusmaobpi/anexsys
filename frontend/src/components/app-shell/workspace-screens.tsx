@@ -26,6 +26,8 @@ import { PaymentTerminalsWorkspace } from "@/components/settings/payment-termina
 import { WhatsappNoticesWorkspace } from "@/components/settings/whatsapp-notices-workspace";
 import { IntegrationLayoutWorkspace } from "@/components/integration/integration-layout-workspace";
 import { INTEGRATION_LAYOUTS, INTEGRATION_ORDER_HREF } from "@/components/integration/migration-layouts";
+import { FiscalWorkspace } from "@/components/fiscal/fiscal-workspace";
+
 import { EmailSettingsWorkspace } from "@/components/settings/email-settings-workspace";
 import { WhatsappSettingsWorkspace } from "@/components/settings/whatsapp-settings-workspace";
 
@@ -90,6 +92,14 @@ const workspaceScreens: Record<string, ComponentType> = {
   "/floor-schedule": FloorGradeWorkspace,
   "/floor-today": FloorTodayWorkspace,
   "/quality": QualityWorkspace,
+  "/fiscal/settings": FiscalWorkspace,
+  "/fiscal/certificates": FiscalWorkspace,
+  "/fiscal/environments": FiscalWorkspace,
+  "/fiscal/batch": FiscalWorkspace,
+  "/fiscal/history": FiscalWorkspace,
+  "/fiscal/cancellations": FiscalWorkspace,
+  "/fiscal/pending": FiscalWorkspace,
+  "/fiscal/audit": FiscalWorkspace,
   [INTEGRATION_ORDER_HREF]: IntegrationLayoutWorkspace,
   ...Object.fromEntries(INTEGRATION_LAYOUTS.map((layout) => [layout.href, IntegrationLayoutWorkspace])),
 };

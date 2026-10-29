@@ -221,6 +221,13 @@ export class AtelierCatalogService {
     actorUserId: string;
     sortOrder?: number;
     difficultyGrade?: number | null;
+    fiscalCode?: string | null;
+    nationalNfseCode?: string | null;
+    municipalCode?: string | null;
+    issRate?: number | null;
+    issWithheld?: boolean;
+    operationNature?: string | null;
+    fiscalDescription?: string | null;
   }) {
     await this.tenantService.getById(input.tenantId);
     const displayName = input.displayName.trim();
@@ -243,6 +250,13 @@ export class AtelierCatalogService {
         defaultPrice: null,
         sortOrder: input.sortOrder ?? 0,
         difficultyGrade: this.optionalDifficulty(input.difficultyGrade),
+        fiscalCode: this.optionalFiscal(input.fiscalCode),
+        nationalNfseCode: this.optionalFiscal(input.nationalNfseCode),
+        municipalCode: this.optionalFiscal(input.municipalCode),
+        issRate: input.issRate === undefined || input.issRate === null ? null : input.issRate.toFixed(4),
+        issWithheld: Boolean(input.issWithheld),
+        operationNature: this.optionalFiscal(input.operationNature),
+        fiscalDescription: this.optionalFiscal(input.fiscalDescription),
         status: MeasurementCatalogStatus.ACTIVE,
         isDeleted: false,
         deletedAt: null,
@@ -271,6 +285,13 @@ export class AtelierCatalogService {
       sortOrder?: number;
       status?: MeasurementCatalogStatus;
       difficultyGrade?: number | null;
+      fiscalCode?: string | null;
+      nationalNfseCode?: string | null;
+      municipalCode?: string | null;
+      issRate?: number | null;
+      issWithheld?: boolean;
+      operationNature?: string | null;
+      fiscalDescription?: string | null;
       actorUserId: string;
     },
   ) {
@@ -297,6 +318,13 @@ export class AtelierCatalogService {
     if (input.difficultyGrade !== undefined) {
       entity.difficultyGrade = this.optionalDifficulty(input.difficultyGrade);
     }
+    if (input.fiscalCode !== undefined) entity.fiscalCode = this.optionalFiscal(input.fiscalCode);
+    if (input.nationalNfseCode !== undefined) entity.nationalNfseCode = this.optionalFiscal(input.nationalNfseCode);
+    if (input.municipalCode !== undefined) entity.municipalCode = this.optionalFiscal(input.municipalCode);
+    if (input.issRate !== undefined) entity.issRate = input.issRate === null ? null : input.issRate.toFixed(4);
+    if (input.issWithheld !== undefined) entity.issWithheld = input.issWithheld;
+    if (input.operationNature !== undefined) entity.operationNature = this.optionalFiscal(input.operationNature);
+    if (input.fiscalDescription !== undefined) entity.fiscalDescription = this.optionalFiscal(input.fiscalDescription);
     entity.updatedBy = input.actorUserId;
     const saved = await this.serviceRepository.save(entity);
     await this.auditService.record({
@@ -634,6 +662,11 @@ export class AtelierCatalogService {
 
   private companyDisplayName(company: { legalName: string; tradeName: string | null }): string {
     return company.tradeName?.trim() || company.legalName;
+  }
+
+  private optionalFiscal(value: string | null | undefined) {
+    const text = value?.trim();
+    return text ? text : null;
   }
 
   private optionalDifficulty(value: number | null | undefined) {

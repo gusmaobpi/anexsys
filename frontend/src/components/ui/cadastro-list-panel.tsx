@@ -89,6 +89,7 @@ type CadastroListPanelProps<T extends { id: string }> = {
   editLabelForRow?: (row: T) => string;
   onDelete?: (row: T) => void;
   onDeleteMany?: (rows: T[]) => void;
+  bulkActions?: Array<{ id: string; label: string; onSelect: (rows: T[]) => void }>;
   onInactivate?: (row: T) => void;
   canInactivate?: (row: T) => boolean;
   onPay?: (row: T) => void;
@@ -126,6 +127,7 @@ export function CadastroListPanel<T extends { id: string }>({
   editLabelForRow,
   onDelete,
   onDeleteMany,
+  bulkActions,
   onInactivate,
   canInactivate,
   onPay,
@@ -292,6 +294,20 @@ export function CadastroListPanel<T extends { id: string }>({
                     </button>
                   </li>
                 ) : null}
+                {bulkActions?.map((action) => (
+                  <li key={action.id}>
+                    <button
+                      disabled={!hasSelection}
+                      onClick={() => {
+                        action.onSelect(selectedRecords);
+                        setOpenMenu(null);
+                      }}
+                      type="button"
+                    >
+                      {action.label}
+                    </button>
+                  </li>
+                ))}
                 {onDeleteMany ? (
                   <li>
                     <button

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { KeyboardEvent, useState } from "react";
 import { useSession } from "@/components/providers/session-provider";
 import { describeWorkspaceError } from "@/components/ui/workspace-flash";
 import { applyOsMoneyTyping, formatOsMoneyInput } from "@/components/service-orders/service-order-workspace-view-model";
@@ -28,8 +28,7 @@ export function OsProductPriceQuickCreate({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleSubmit() {
     const minutes = Number(estimatedMinutes);
     const price = Number(suggestedPrice.replace(/\./g, "").replace(",", "."));
     if (!serviceName.trim()) {
@@ -64,15 +63,22 @@ export function OsProductPriceQuickCreate({
     }
   }
 
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Enter" || event.target instanceof HTMLTextAreaElement) {
+      return;
+    }
+    event.preventDefault();
+    void handleSubmit();
+  }
+
   return (
-    <form className="os-price-quick-create" onSubmit={handleSubmit}>
+    <div className="os-price-quick-create" onKeyDown={onKeyDown}>
       <p className="table-subtle">
         Preço de <strong>{productName}</strong>. O tempo fica só para o PCP depois; não mexe no prazo da OS.
       </p>
       <label className="field">
         <span>Serviço</span>
         <input
-          required
           value={serviceName}
           onChange={(event) => setServiceName(event.target.value)}
         />
@@ -82,7 +88,6 @@ export function OsProductPriceQuickCreate({
         <input
           inputMode="decimal"
           placeholder="0,00"
-          required
           value={suggestedPrice}
           onChange={(event) => setSuggestedPrice(applyOsMoneyTyping(event.target.value))}
         />
@@ -91,23 +96,21 @@ export function OsProductPriceQuickCreate({
         <span>Tempo previsto (min)</span>
         <input
           inputMode="numeric"
-          min={1}
           placeholder="15"
-          required
           value={estimatedMinutes}
           onChange={(event) => setEstimatedMinutes(event.target.value.replace(/\D/g, ""))}
         />
       </label>
       {message ? <p className="table-subtle">{message}</p> : null}
       <div className="button-row">
-        <button className="button" disabled={saving} type="submit">
+        <button className="button" disabled={saving} onClick={() => void handleSubmit()} type="button">
           {saving ? "Salvando…" : "Salvar preço"}
         </button>
         <button className="button-secondary" onClick={onCancel} type="button">
           Cancelar
         </button>
       </div>
-    </form>
+    </div>
   );
 }
 

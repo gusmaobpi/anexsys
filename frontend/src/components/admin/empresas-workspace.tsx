@@ -9,6 +9,7 @@ import { useWorkspaceSearchParams } from "@/components/app-shell/workspace-pane"
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
 import { useSession } from "@/components/providers/session-provider";
 import { DependencyGuardPanel, type DependencyValidationResult } from "@/components/ui/dependency-guard-panel";
+import { BrandFrame } from "@/components/ui/brand-frame";
 import { WorkspaceFlash } from "@/components/ui/workspace-flash";
 
 type CompanyRecord = {
@@ -30,6 +31,8 @@ type CompanyRecord = {
   country: string | null;
   isDefault: boolean;
   status: "active" | "inactive";
+  logoMimeType?: string | null;
+  logoBase64?: string | null;
 };
 
 type CompanyForm = {
@@ -48,6 +51,8 @@ type CompanyForm = {
   city: string;
   state: string;
   country: string;
+  logoMimeType: string | null;
+  logoBase64: string | null;
 };
 
 const emptyForm = (): CompanyForm => ({
@@ -66,6 +71,8 @@ const emptyForm = (): CompanyForm => ({
   city: "",
   state: "",
   country: "BR",
+  logoMimeType: null,
+  logoBase64: null,
 });
 
 function digitsOnly(value: string): string {
@@ -111,6 +118,8 @@ function mapCompanyToForm(company: CompanyRecord): CompanyForm {
     city: company.city ?? "",
     state: company.state ?? "",
     country: company.country ?? "BR",
+    logoMimeType: company.logoMimeType ?? null,
+    logoBase64: company.logoBase64 ?? null,
   };
 }
 
@@ -131,6 +140,8 @@ function toPayload(form: CompanyForm) {
     city: form.city || null,
     state: form.state || null,
     country: form.country || "BR",
+    logoMimeType: form.logoMimeType,
+    logoBase64: form.logoBase64,
   };
 }
 
@@ -618,6 +629,19 @@ function CompanyFields({
 }) {
   return (
     <>
+      <BrandFrame
+        hint="Este quadro é o mesmo do formulário que o cliente abre no celular."
+        image={form.logoBase64 && form.logoMimeType ? { mimeType: form.logoMimeType, contentBase64: form.logoBase64 } : null}
+        kind="logo"
+        label="Logomarca"
+        onChange={(image) =>
+          setForm((current) => ({
+            ...current,
+            logoMimeType: image?.mimeType ?? null,
+            logoBase64: image?.contentBase64 ?? null,
+          }))
+        }
+      />
       <div className="form-section-title">Identificação</div>
       <div className="filters-grid">
         <label className="field">

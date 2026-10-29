@@ -440,6 +440,16 @@ async function main() {
       WHERE orders.id = numbered.id
         AND orders.group_seq IS NULL
     `);
+    await client.query(`
+      ALTER TABLE IF EXISTS companies
+        ADD COLUMN IF NOT EXISTS logo_mime_type varchar(30),
+        ADD COLUMN IF NOT EXISTS logo_base64 text
+    `);
+    await client.query(`
+      ALTER TABLE IF EXISTS user_identities
+        ADD COLUMN IF NOT EXISTS portrait_mime_type varchar(30),
+        ADD COLUMN IF NOT EXISTS portrait_base64 text
+    `);
     console.log('Banco da OS conferido (horário de saída, produto, serviço, preços por combinação, versões da sacola, trava, marca, modelo, série, qualidade, prova, anotações de prova, retirada, aprovação, link público e retorno do cliente).');
   } finally {
     await client.end();

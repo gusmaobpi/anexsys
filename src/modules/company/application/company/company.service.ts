@@ -6,6 +6,7 @@ import { TenantService } from 'src/modules/tenant/application/tenant/tenant.serv
 import { CompanyStatus } from 'src/shared/domain/enums';
 import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
 import { EntityNotFoundError } from 'src/shared/errors/entity-not-found.error';
+import { readBrandImageUpdate } from 'src/shared/brand-image';
 import { CompanyEntity } from '../../infrastructure/persistence/entities/company.entity';
 import { CompanyRepository } from '../../infrastructure/persistence/repositories/company.repository';
 
@@ -25,6 +26,8 @@ export type CompanyFiscalInput = {
   city?: string | null;
   state?: string | null;
   country?: string | null;
+  logoMimeType?: string | null;
+  logoBase64?: string | null;
 };
 
 export type CreateCompanyInput = CompanyFiscalInput & {
@@ -72,6 +75,7 @@ export class CompanyService {
       legalName,
       ...profile,
       country: profile.country ?? 'BR',
+      ...this.logoColumns(input.logoMimeType, input.logoBase64),
       isDefault: existingCompanies.length === 0,
       status: CompanyStatus.ACTIVE,
       isDeleted: false,
@@ -187,6 +191,11 @@ export class CompanyService {
     if (dto.country !== undefined) {
       company.country = profile.country;
     }
+    const logo = readBrandImageUpdate(dto.logoMimeType, dto.logoBase64);
+    if (logo !== undefined) {
+      company.logoMimeType = logo?.mimeType ?? null;
+      company.logoBase64 = logo?.contentBase64 ?? null;
+    }
     if (dto.status !== undefined && dto.status !== previousStatus) {
       if (dto.status === CompanyStatus.INACTIVE) {
         await this.assertNotLastActiveCompany(tenantId, company.id);
@@ -262,6 +271,14 @@ export class CompanyService {
       state: this.normalizeState(input.state),
       country: this.normalizeOptionalText(input.country),
     };
+  }
+
+  private logoColumns(mimeType?: string | null, contentBase64?: string | null) {
+    const logo = readBrandImageUpdate(mimeType, contentBase64);
+    if (!logo) {
+      return { logoMimeType: null, logoBase64: null };
+    }
+    return { logoMimeType: logo.mimeType, logoBase64: logo.contentBase64 };
   }
 
   private normalizeOptionalText(value?: string | null): string | null {

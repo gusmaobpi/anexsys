@@ -27,6 +27,13 @@ export type PublicOsTrackingView = {
   pickedUp: boolean;
   pickupMethod?: string | null;
   paymentLabel: string;
+  agreed?: boolean;
+  agreedAt?: string | null;
+  termsText?: string | null;
+  privacyNotice?: string | null;
+  logo?: { mimeType: string; contentBase64: string } | null;
+  attendantName?: string | null;
+  attendantPortrait?: { mimeType: string; contentBase64: string } | null;
 };
 
 export function describePublicOsError(error: unknown): string {
@@ -48,6 +55,23 @@ export function formatPublicOsDate(value: string | null | undefined) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("pt-BR").format(date);
+}
+
+export function publicAttendantFirstName(name: string | null | undefined) {
+  return (name ?? "").trim().split(/\s+/)[0] ?? "";
+}
+
+export function publicAttendantInitials(name: string | null | undefined) {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return `${parts[0].slice(0, 1)}${parts[parts.length - 1].slice(0, 1)}`.toUpperCase();
+}
+
+export function publicOsAgreement(view: Pick<PublicOsTrackingView, "agreed" | "status">) {
+  if (view.agreed) return "agreed" as const;
+  if (view.status === "cancelled" || view.status === "picked_up") return null;
+  return "concordo" as const;
 }
 
 export function publicOsCta(view: Pick<PublicOsTrackingView, "pickedUp" | "recebiReady" | "status">) {

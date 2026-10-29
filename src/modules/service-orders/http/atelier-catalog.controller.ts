@@ -13,7 +13,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { DependencyValidationService } from 'src/modules/governance/application/dependency-validation.service';
 import { Permissions } from 'src/platform/auth/permissions.decorator';
 import { CurrentRequest, CurrentTenantId } from 'src/platform/http/request-context.decorators';
@@ -36,6 +36,14 @@ class CreateCatalogNameBody {
   @Min(1)
   @Max(4)
   difficultyGrade?: number | null;
+
+  @IsOptional() @IsString() fiscalCode?: string | null;
+  @IsOptional() @IsString() nationalNfseCode?: string | null;
+  @IsOptional() @IsString() municipalCode?: string | null;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) issRate?: number | null;
+  @IsOptional() @IsBoolean() issWithheld?: boolean;
+  @IsOptional() @IsString() operationNature?: string | null;
+  @IsOptional() @IsString() fiscalDescription?: string | null;
 }
 
 class PatchCatalogNameBody {
@@ -58,6 +66,14 @@ class PatchCatalogNameBody {
   @Min(1)
   @Max(4)
   difficultyGrade?: number | null;
+
+  @IsOptional() @IsString() fiscalCode?: string | null;
+  @IsOptional() @IsString() nationalNfseCode?: string | null;
+  @IsOptional() @IsString() municipalCode?: string | null;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) issRate?: number | null;
+  @IsOptional() @IsBoolean() issWithheld?: boolean;
+  @IsOptional() @IsString() operationNature?: string | null;
+  @IsOptional() @IsString() fiscalDescription?: string | null;
 }
 
 class CreateProductServiceBody {
@@ -264,6 +280,13 @@ export class AtelierServicesController {
       displayName: body.displayName,
       sortOrder: body.sortOrder,
       difficultyGrade: body.difficultyGrade,
+      fiscalCode: body.fiscalCode,
+      nationalNfseCode: body.nationalNfseCode,
+      municipalCode: body.municipalCode,
+      issRate: body.issRate,
+      issWithheld: body.issWithheld,
+      operationNature: body.operationNature,
+      fiscalDescription: body.fiscalDescription,
       actorUserId: principal.userId,
     });
   }
@@ -283,6 +306,13 @@ export class AtelierServicesController {
       sortOrder: body.sortOrder,
       status: body.status,
       difficultyGrade: body.difficultyGrade,
+      fiscalCode: body.fiscalCode,
+      nationalNfseCode: body.nationalNfseCode,
+      municipalCode: body.municipalCode,
+      issRate: body.issRate,
+      issWithheld: body.issWithheld,
+      operationNature: body.operationNature,
+      fiscalDescription: body.fiscalDescription,
       actorUserId: principal.userId,
     });
   }

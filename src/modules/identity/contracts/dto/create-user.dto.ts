@@ -18,6 +18,14 @@ export class CreateUserDto {
   @MinLength(8)
   password!: string;
 
+  @IsOptional()
+  @IsString()
+  portraitMimeType?: string | null;
+
+  @IsOptional()
+  @IsString()
+  portraitBase64?: string | null;
+
   @IsUUID()
   actorUserId!: string;
 }

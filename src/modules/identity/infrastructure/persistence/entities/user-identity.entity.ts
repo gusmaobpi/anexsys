@@ -16,6 +16,12 @@ export class UserIdentityEntity extends SoftDeletableBusinessEntity {
   @Column({ name: 'display_name', type: 'text' })
   displayName!: string;
 
+  @Column({ name: 'portrait_mime_type', type: 'varchar', length: 30, nullable: true })
+  portraitMimeType!: string | null;
+
+  @Column({ name: 'portrait_base64', type: 'text', nullable: true })
+  portraitBase64!: string | null;
+
   @Column({ name: 'status', type: 'varchar', length: 30, default: UserStatus.INVITED })
   status!: UserStatus;
 }
