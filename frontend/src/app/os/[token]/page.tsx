@@ -134,7 +134,7 @@ export default function PublicOsPage() {
             <div className="auth-card__body">
               {preview ? (
                 <p className="os-rule-banner">
-                  Este é o formulário que o cliente abre no celular. O texto jurídico ainda pode ser ajustado. O WhatsApp entra quando a Meta liberar o número.
+                  Este é o formulário que o cliente abre no celular. O aviso e o termo saem de Privacidade. O WhatsApp entra quando a Meta liberar o número.
                 </p>
               ) : null}
               <p className="public-os__status">{view.statusLabel}</p>

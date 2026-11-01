@@ -1,6 +1,6 @@
 # Decisões do André
 
-**Atualizado em:** 09/10/2026
+**Atualizado em:** 01/11/2026
 **Substitui:** as regras de negócio da documentação antiga (`docs/arquivo/`) nos pontos em que elas divergem deste documento.
 **Valor:** este é o documento **oficial** das regras de negócio. Quando outro documento discordar, vale este.
 
@@ -469,3 +469,15 @@ O André viu o conflito: versão `-G` e garantia com **G na frente** da placa. `
 3. **Refação no balcão** (Pronto para retirada, cliente prova e recusa): mesma família, letra **C**, motivo do cliente. Não é Cliente voltou e não é prova.
 4. Se o cliente leva parte das peças: a **mãe fica parcial** (não Retirado) enquanto a filha de processo estiver aberta. **Pagar some na mãe**. Pagar a filha quita o **grupo** (as duas linhas saem Pago).
 5. Devolução/reembolso de peça já paga e abandonada fica para depois.
+
+## 20. Privacidade operacional (01/11/2026)
+
+Implementado como continuação do Ciclo 10, depois do formulário do celular:
+
+- O aviso de privacidade, o termo de aceite, o texto do operador e o plano de incidente são editáveis em **Privacidade**. O formulário do celular usa o texto gravado.
+- O link público continua aberto até a retirada. Depois, vale a garantia de execução da Conta mais a margem (padrão 30 dias). No dia seguinte, o celular avisa que o link expirou.
+- **Pedidos do titular** registra acesso, correção, anonimização, exclusão ou portabilidade, com prazo de resposta (padrão 15 dias) e a resposta dada. No acesso, dá para montar um resumo do cadastro e das OS.
+- **Tratamento de dados** lista o que a Conta trata, para quê e onde.
+- **Incidentes** guarda o que aconteceu e se foi contido ou comunicado.
+- A guarda de inativos (padrão 5 anos) e do endereço de entrega (padrão 30 dias) fica registrada. O sistema **não apaga** cadastro automaticamente.
+- Os textos continuam provisórios até a revisão do advogado. WhatsApp oficial, backup testado e a autorização escrita de virada continuam fora.

@@ -29,6 +29,7 @@ import { INTEGRATION_LAYOUTS, INTEGRATION_ORDER_HREF } from "@/components/integr
 import { FiscalWorkspace } from "@/components/fiscal/fiscal-workspace";
 
 import { EmailSettingsWorkspace } from "@/components/settings/email-settings-workspace";
+import { PrivacyWorkspace } from "@/components/settings/privacy-workspace";
 import { WhatsappSettingsWorkspace } from "@/components/settings/whatsapp-settings-workspace";
 
 function AccessWorkspaceScreen() {
@@ -85,6 +86,11 @@ const workspaceScreens: Record<string, ComponentType> = {
   "/settings/payments/terminals": PaymentTerminalsWorkspaceScreen,
   "/settings/whatsapp": WhatsappSettingsWorkspace,
   "/settings/email": EmailSettingsWorkspace,
+  "/settings/privacy": PrivacyWorkspace,
+  "/settings/privacy/requests": PrivacyWorkspace,
+  "/settings/privacy/activities": PrivacyWorkspace,
+  "/settings/privacy/incidents": PrivacyWorkspace,
+  "/settings/privacy/training": PrivacyWorkspace,
   "/whatsapp-notices": WhatsappNoticesWorkspace,
   "/service-orders": ServiceOrdersWorkspace,
   "/pick-bag": PickBagWorkspace,

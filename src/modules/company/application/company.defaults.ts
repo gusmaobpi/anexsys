@@ -59,6 +59,8 @@ export const ATELIER_ROLES = [
       'branches.read',
       'whatsapp.read',
       'whatsapp.resend',
+      'privacy.read',
+      'privacy.write',
     ],
   },
   {
@@ -114,6 +116,8 @@ export const ATELIER_ROLES = [
       'whatsapp.resend',
       'email.write',
       'service_orders.release',
+      'privacy.read',
+      'privacy.write',
     ],
   },
 ] as const;

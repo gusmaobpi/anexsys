@@ -146,6 +146,36 @@ const navSections: NavSection[] = [
         hint: "Caixa de saída da Conta",
         requiredPermissions: ["email.write"],
       },
+      {
+        href: "/settings/privacy",
+        label: "Privacidade",
+        hint: "Aviso, termo e prazo do link",
+        requiredPermissions: ["privacy.read"],
+      },
+      {
+        href: "/settings/privacy/requests",
+        label: "Pedidos do titular",
+        hint: "Acesso, correção e exclusão",
+        requiredPermissions: ["privacy.read"],
+      },
+      {
+        href: "/settings/privacy/activities",
+        label: "Tratamento de dados",
+        hint: "O que a Conta trata e por quê",
+        requiredPermissions: ["privacy.read"],
+      },
+      {
+        href: "/settings/privacy/incidents",
+        label: "Incidentes",
+        hint: "O que fazer se houver vazamento",
+        requiredPermissions: ["privacy.read"],
+      },
+      {
+        href: "/settings/privacy/training",
+        label: "Treinamento",
+        hint: "Uma página por papel",
+        requiredPermissions: ["privacy.read"],
+      },
     ],
   },
   {

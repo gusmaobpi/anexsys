@@ -1,6 +1,6 @@
 # Fluxo de status da Ordem de Serviço
 
-**Atualizado em:** 09/10/2026
+**Atualizado em:** 01/11/2026
 **Substitui:** os ciclos de vida de status da documentação antiga (`docs/arquivo/`). Baseado em `02-decisoes-do-andre.md`.
 **Situação:** o fluxo abaixo é o **desenho decidido**. **Ainda não está construído**: hoje o sistema só tem os status Em aberto, Aprovada e Cancelada para a OS. Os pontos que estavam **em aberto** foram resolvidos nas rodadas 2 e 3 de respostas do André.
 
@@ -49,7 +49,7 @@ e vai por WhatsApp     papel)                 impressa no bolso          termina
 6. **Cliente.** Vê **a última fase pública atingida**, com as datas, no link público. Em "Reprovado pela qualidade" continua vendo "Controle de qualidade".
 7. **Refação.** Só as peças reprovadas voltam para a esteira, numa **nova versão da OP** (versão 2, 3…). A OS original **continua em Controle de qualidade**. Quando a sacola retorna, o revisor puxa a **mesma OS**; a tela mostra a versão da refação para aprovar ou reprovar de novo. 100% aprovado avança a OS; nova reprovação gera a próxima OP.
 8. **Aviso de pagamento.** Se há saldo em aberto, a OS e a retirada mostram **"Falta pagamento"**. **Não é status.** A entrega só bloqueia se a Conta estiver com **Bloquear entrega por inadimplência**. Liberação do gerente com motivo entra depois.
-9. **Mensagens.** O combinado antigo era WhatsApp só em **Em aberto** e **Pronto para retirada**. O **link público** (`/os/{token}`) abre um **microformulário** no celular (status, o combinado, **Recebi**; **Concordo** entra depois no mesmo endereço). O envio oficial do WhatsApp entra depois; a atendente copia o link na OS. Só envia com **consentimento registrado**.
+9. **Mensagens.** O combinado antigo era WhatsApp só em **Em aberto** e **Pronto para retirada**. O **link público** (`/os/{token}`) abre o formulário no celular: status, o combinado, **Concordo** e **Recebi** quando o balcão libera. O aviso e o termo saem da tela **Privacidade**. Depois da retirada, o link vale a garantia de execução mais a margem configurada; no dia seguinte ele avisa que expirou. O envio oficial do WhatsApp entra depois; a atendente copia o link na OS. Só envia com **consentimento registrado**.
 
 ## 5. Reconserto e garantia
 

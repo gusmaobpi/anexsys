@@ -1,6 +1,6 @@
 # Estado atual do ANEXSYS
 
-**Atualizado em:** 09/10/2026
+**Atualizado em:** 01/11/2026
 **Substitui:** `PROJECT_IMPLEMENTATION_STATUS`, `CURRENT_APPLICATION_STATUS`, `CURRENT_REPOSITORY_STATUS`, `REPOSITORY_CODE_AUDIT_V1` e os relatórios de sprint (todos em `docs/arquivo/`), que se contradizem.
 
 **Como ler:** cada item diz se algo foi **demonstrado numa tela**, **testado com banco de dados** e **aceito pelo André**.
@@ -24,7 +24,7 @@
 | Concierge e portal do cliente | Existe | Página pública `/os/{token}` | Unitários passam | **Validado em parte (09/10):** o link é copiado na OS. Microformulário (status, peças, **Recebi**) ainda não abre no celular (localhost). **Concordo** e novos botões no mesmo endereço, depois |
 | **WhatsApp** | Envio via **WhatsApp Web** (`wa.me`) | Menu **Por WhatsApp** na OS | Unitários passam | **Validado pelo André (09/10):** conecta no WhatsApp Web e manda a mensagem certa, como no sistema atual. API oficial da Meta fica para depois |
 | Migração/importação de dados | **Não existe** | **Não existe** | n/a | |
-| LGPD (consentimento, retenção) | **Não existe** | **Não existe** | n/a | |
+| LGPD (aviso, canal do titular, prazo do link) | Existe | Existe: **Privacidade**, **Pedidos do titular**, **Tratamento de dados**, **Incidentes**, **Treinamento** | Unitário do prazo do link | O aviso e o termo do celular saem da tela. O link expira depois da retirada + garantia + margem. A guarda de inativos fica registrada e **não apaga** cadastro sozinha. Importação já está em Integrações. Backup e advogado continuam fora |
 | Cobrança do ANEXSYS | **Não existe** | **Não existe** | n/a | |
 
 ## 2. Números verificados em 05/10/2026 (noite, fechamento dos Ciclos 0 e 1)

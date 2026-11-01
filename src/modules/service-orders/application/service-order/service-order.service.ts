@@ -48,8 +48,6 @@ import {
 import {
   APPROVAL_ACCEPTED_TEXT,
   APPROVAL_RELEASE_TEXT,
-  LINK_ACCEPTANCE_TEXT,
-  PUBLIC_PRIVACY_NOTICE,
   buildApprovalMeasurementsSnapshot,
   buildApprovalServicesSnapshot,
   canRecordApproval,
@@ -76,6 +74,13 @@ import {
   osPayLockedOnParent,
 } from './service-order-finance';
 import { publicCustomerFirstName, publicOsStatusLabel } from './service-order-public';
+import {
+  LINK_MARGIN_DAYS_DEFAULT,
+  PRIVACY_ACCEPTANCE_DEFAULT,
+  PRIVACY_NOTICE_DEFAULT,
+  publicLinkExpiry,
+  todayInBrasilia,
+} from 'src/modules/privacy/application/privacy.rules';
 import { buildClientReturnPreview, osReturnKindLabel, todayDateOnly } from './service-order-return';
 import { TenantContext } from 'src/platform/tenancy/tenant-context';
 import {
@@ -515,6 +520,8 @@ export class ServiceOrderService {
       const signature = await this.findLatestApprovalSignature(serviceOrder.id);
       const agreed = Boolean(signature && isCustomerSignatureMethod(signature.method));
       const brand = await this.readPublicBrand(serviceOrder);
+      const privacy = await this.readPublicPrivacy(serviceOrder.tenantId, tenant.warrantyExecutionPeriodDays);
+      this.assertPublicLinkOpen(serviceOrder, privacy);
       return {
         orderNo: serviceOrder.orderNo,
         companyName: tenant.displayName || tenant.legalName,
@@ -535,8 +542,8 @@ export class ServiceOrderService {
         paymentLabel: await this.readPublicPaymentLabel(serviceOrder),
         agreed,
         agreedAt: agreed ? signature?.confirmedAt ?? null : null,
-        termsText: LINK_ACCEPTANCE_TEXT,
-        privacyNotice: PUBLIC_PRIVACY_NOTICE,
+        termsText: privacy.acceptanceText,
+        privacyNotice: privacy.privacyNotice,
         logo: brand.logo,
         attendantName: brand.attendantName,
         attendantPortrait: brand.attendantPortrait,
@@ -550,6 +557,8 @@ export class ServiceOrderService {
   ) {
     return TenantContext.run({ tenantId: null, bypass: true }, async () => {
       const serviceOrder = await this.loadPublicServiceOrder(publicToken);
+      const tenant = await this.tenantService.getById(serviceOrder.tenantId);
+      this.assertPublicLinkOpen(serviceOrder, await this.readPublicPrivacy(serviceOrder.tenantId, tenant.warrantyExecutionPeriodDays));
       await this.completeApproval(serviceOrder.tenantId, serviceOrder.id, serviceOrder.commercialResponsibleActorId, {
         method: 'link',
         userAgent: evidence?.userAgent,
@@ -565,6 +574,8 @@ export class ServiceOrderService {
   ) {
     return TenantContext.run({ tenantId: null, bypass: true }, async () => {
       const serviceOrder = await this.loadPublicServiceOrder(publicToken);
+      const tenant = await this.tenantService.getById(serviceOrder.tenantId);
+      this.assertPublicLinkOpen(serviceOrder, await this.readPublicPrivacy(serviceOrder.tenantId, tenant.warrantyExecutionPeriodDays));
       await this.confirmPickupFromLink(serviceOrder.tenantId, serviceOrder.id, evidence);
       return this.getPublicTrackingView(publicToken);
     });
@@ -600,6 +611,49 @@ export class ServiceOrderService {
       }
     }
     return { logo, attendantName, attendantPortrait };
+  }
+
+  private async readPublicPrivacy(tenantId: string, warrantyDays: number | null | undefined) {
+    let privacyNotice = PRIVACY_NOTICE_DEFAULT;
+    let acceptanceText = PRIVACY_ACCEPTANCE_DEFAULT;
+    let marginDays = LINK_MARGIN_DAYS_DEFAULT;
+    try {
+      if (typeof this.dataSource.query === 'function') {
+        const rows = await this.dataSource.query(
+          `SELECT privacy_notice, acceptance_text, link_margin_days FROM privacy_settings WHERE tenant_id = $1 LIMIT 1`,
+          [tenantId],
+        );
+        const row = rows?.[0];
+        if (row?.privacy_notice) privacyNotice = String(row.privacy_notice);
+        if (row?.acceptance_text) acceptanceText = String(row.acceptance_text);
+        if (Number.isInteger(row?.link_margin_days)) marginDays = row.link_margin_days;
+      }
+    } catch {
+      privacyNotice = PRIVACY_NOTICE_DEFAULT;
+    }
+    const resolvedWarranty = typeof warrantyDays === 'number' && Number.isInteger(warrantyDays) ? warrantyDays : 90;
+    return {
+      privacyNotice,
+      acceptanceText,
+      marginDays,
+      warrantyDays: resolvedWarranty,
+    };
+  }
+
+  private assertPublicLinkOpen(
+    serviceOrder: { status: string; actualPickupDate?: string | null },
+    privacy: { marginDays: number; warrantyDays: number },
+  ) {
+    const state = publicLinkExpiry({
+      status: serviceOrder.status,
+      actualPickupDate: serviceOrder.actualPickupDate ?? null,
+      warrantyDays: privacy.warrantyDays,
+      marginDays: privacy.marginDays,
+      today: todayInBrasilia(),
+    });
+    if (state.expired) {
+      throw new DomainValidationError('Este link expirou.');
+    }
   }
 
   private async loadPublicServiceOrder(publicToken: string) {
@@ -1146,7 +1200,7 @@ export class ServiceOrderService {
           input.method === 'release'
             ? APPROVAL_RELEASE_TEXT
             : input.method === 'link'
-              ? LINK_ACCEPTANCE_TEXT
+              ? (await this.readPublicPrivacy(serviceOrder.tenantId, null)).acceptanceText
               : APPROVAL_ACCEPTED_TEXT,
         releaseReason,
         totalValueSnapshot: serviceOrder.totalValue,
