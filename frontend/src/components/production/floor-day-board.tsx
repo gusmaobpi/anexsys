@@ -46,9 +46,6 @@ export function FloorDayBoardChip() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
     if (!branchId) {
       setBoard(null);
       setError("Selecione a filial para ver a grade do dia.");
@@ -71,7 +68,7 @@ export function FloorDayBoardChip() {
     return () => {
       cancelled = true;
     };
-  }, [apiJson, branchId, open]);
+  }, [apiJson, branchId]);
 
   useEffect(() => {
     if (!open) {
@@ -87,16 +84,35 @@ export function FloorDayBoardChip() {
   }, [open]);
 
   const groups = board ? monthGroups(board.days) : [];
+  const todayNamesCount = board?.days[0]?.names.length ?? null;
+  const futureEmptyDays = board ? board.days.slice(1).filter((d) => d.names.length === 0).length : 0;
+  const boardSemaphore: "green" | "yellow" | "red" =
+    todayNamesCount === null
+      ? "green"
+      : todayNamesCount === 0
+        ? "red"
+        : futureEmptyDays > 0
+          ? "yellow"
+          : "green";
+  const boardMetric =
+    todayNamesCount === null
+      ? ""
+      : todayNamesCount === 0
+        ? "Sem escala hoje"
+        : `${todayNamesCount} hoje`;
 
   return (
     <>
       <button
         aria-expanded={open}
-        className={`topbar-chip${open ? " topbar-chip--active" : ""}`}
+        className={`topbar-chip topbar-chip--${boardSemaphore}${open ? " topbar-chip--active" : ""}`}
         onClick={() => setOpen((current) => !current)}
+        title="Semáforo da Escala / Grade do Dia"
         type="button"
       >
-        Grade do Dia
+        <span aria-hidden="true" className="topbar-chip__dot" />
+        <span>Grade do Dia</span>
+        {boardMetric ? <span className="topbar-chip__metric">{boardMetric}</span> : null}
       </button>
       {open ? (
         <div aria-labelledby={titleId} aria-modal="true" className="day-board-lightbox" role="dialog">

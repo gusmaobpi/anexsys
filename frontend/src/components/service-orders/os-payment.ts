@@ -142,6 +142,23 @@ export function osCanOpenPay(row?: {
   return row?.status !== "cancelled" && row?.paymentStatus !== "paid" && !row?.payLockedOnParent;
 }
 
+export function osRowPayState(row?: {
+  status?: string | null;
+  paymentStatus?: string | null;
+  payLockedOnParent?: boolean | null;
+} | null): "open" | "partial" | "paid" | "hidden" {
+  if (!row || row.status === "cancelled" || row.payLockedOnParent) {
+    return "hidden";
+  }
+  if (row.paymentStatus === "paid") {
+    return "paid";
+  }
+  if (row.paymentStatus === "partial") {
+    return "partial";
+  }
+  return "open";
+}
+
 export function osShowsFaltaPagamento(summary?: Pick<OsFinancialSummary, "outstandingBalance" | "paymentStatus"> | null) {
   if (!summary) {
     return false;

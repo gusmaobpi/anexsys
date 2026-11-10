@@ -28,6 +28,8 @@ export type EmpresaOption = {
   legalName: string;
   tradeName: string | null;
   isDefault: boolean;
+  logoMimeType?: string | null;
+  logoBase64?: string | null;
 };
 
 export function isEmpresaActiveForCombo(status?: string | null): boolean {

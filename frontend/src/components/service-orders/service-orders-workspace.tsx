@@ -20,7 +20,14 @@ import {
   type OsPrintView,
 } from "@/components/service-orders/os-documents";
 import { canReopenBagAfterFloor } from "@/components/service-orders/os-floor";
-import { applyOsListFilters, buildOsExcelCsv, osDeliveryTypeLabel, osStatusLabel } from "@/components/service-orders/os-list";
+import {
+  applyOsListFilters,
+  buildOsExcelCsv,
+  osDeliveryTypeLabel,
+  osStatusLabel,
+  summarizeOsByStatus,
+  summarizeOsListTotals,
+} from "@/components/service-orders/os-list";
 import {
   canActOnProof,
   canSendToProof,
@@ -41,7 +48,7 @@ import { approvalMethodLabel, canRecordOsApproval, formatOsInstant, type Approva
 import { OsPickupPanel } from "@/components/service-orders/os-pickup-panel";
 import { pickupMethodLabel, type PickupSummary } from "@/components/service-orders/os-pickup";
 import { OsPayPanel, type OsFinancialSummary } from "@/components/service-orders/os-pay-panel";
-import { osCanOpenPay, osPaymentHistoryLabel, osShouldCloseOrderTab, osShowsFaltaPagamento } from "@/components/service-orders/os-payment";
+import { osCanOpenPay, osPaymentHistoryLabel, osRowPayState, osShouldCloseOrderTab, osShowsFaltaPagamento } from "@/components/service-orders/os-payment";
 import { RowOverflowMenu, type RowMenuItem } from "@/components/ui/row-overflow-menu";
 import {
   addServiceOrderItemGridRow,
@@ -98,6 +105,7 @@ type ServiceOrderRecord = {
   originServiceOrderId?: string | null;
   returnKind?: string | null;
   hasAttachments?: boolean;
+  piecesCount?: number;
   paymentStatus?: "pending" | "partial" | "paid";
   outstandingBalance?: string | null;
   amountPaid?: string | null;
@@ -2109,6 +2117,7 @@ export function ServiceOrdersWorkspace() {
               ),
             },
             { id: "delivery", label: "Entrega", render: (row) => formatDate(row.promisedDeliveryDate) },
+            { id: "pieces", label: "Peças", render: (row) => `${row.piecesCount ?? 0} pç` },
             { id: "type", label: "Tipo", render: (row) => osDeliveryTypeLabel(row.deliveryType) },
             {
               id: "status",
@@ -2119,7 +2128,7 @@ export function ServiceOrdersWorkspace() {
                 </span>
               ),
             },
-            { id: "value", label: "Valor", render: (row) => row.totalValue ?? "—" },
+            { id: "value", label: "Valor", render: (row) => (row.totalValue ? `R$ ${formatOsMoney(Number(row.totalValue))}` : "—") },
             { id: "fiscalNo", label: "Número da Nota", render: (row) => fiscalMarks[row.id]?.documentNo ?? "—" },
             {
               id: "fiscalStatus",
@@ -2142,12 +2151,23 @@ export function ServiceOrdersWorkspace() {
               },
             },
           ]}
-          defaultColumnIds={["name", "delivery", "status", "fiscalNo", "fiscalStatus", "fiscalDate"]}
-          emptyFilters={{ name: "", status: "", deliveryType: "", payment: "" }}
+          defaultColumnIds={["name", "delivery", "pieces", "status", "value", "fiscalNo", "fiscalStatus"]}
+          emptyFilters={{ name: "", status: "", deliveryType: "", payment: "", dateBasis: "promised", dateFrom: "", dateTo: "" }}
           emptyMessage="Nenhuma OS encontrada para os filtros informados."
           excelFileName="ordens-de-servico.csv"
           filterFields={[
             { id: "name", label: "Número", lookup: true, placeholder: "Número já cadastrado" },
+            {
+              id: "dateBasis",
+              kind: "select",
+              label: "Data de referência",
+              options: [
+                { value: "promised", label: "Data de Entrega Prometida" },
+                { value: "opened", label: "Data de Abertura" },
+              ],
+            },
+            { id: "dateFrom", kind: "date", label: "De (data inicial)" },
+            { id: "dateTo", kind: "date", label: "Até (data final)" },
             {
               id: "status",
               kind: "select",
@@ -2188,6 +2208,66 @@ export function ServiceOrdersWorkspace() {
               ],
             },
           ]}
+          headerSummary={({ records: allOrders, appliedFilters, setFilterValue }) => {
+            const buckets = summarizeOsByStatus(allOrders, appliedFilters);
+            const currentStatus = appliedFilters.status ?? "";
+            return (
+              <div className="grid-status-strip" aria-label="Resumo de OS por Status">
+                {buckets.map((bucket) => {
+                  const active = currentStatus === bucket.code;
+                  return (
+                    <button
+                      key={bucket.code || "all"}
+                      className={`grid-status-card${active ? " grid-status-card--active" : ""}`}
+                      onClick={() => setFilterValue("status", bucket.code)}
+                      type="button"
+                    >
+                      <span className="grid-status-card__title">{bucket.label}</span>
+                      <span className="grid-status-card__value">{`R$ ${formatOsMoney(bucket.totalValue)}`}</span>
+                      <span className="grid-status-card__meta">
+                        {`${bucket.ordersCount} OS · ${bucket.piecesCount} ${bucket.piecesCount === 1 ? "peça" : "peças"}`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          }}
+          footerSummary={({ filteredRecords }) => {
+            const totals = summarizeOsListTotals(filteredRecords);
+            return (
+              <div className="grid-totals-bar" aria-label="Totalizadores do filtro ativo">
+                <div className="grid-totals-bar__item">
+                  <span className="grid-totals-bar__label">Ordens no Filtro</span>
+                  <span className="grid-totals-bar__value">{`${totals.ordersCount} OS`}</span>
+                </div>
+                <div className="grid-totals-bar__item">
+                  <span className="grid-totals-bar__label">Total de Peças</span>
+                  <span className="grid-totals-bar__value">{`${totals.piecesCount} peças`}</span>
+                </div>
+                <div className="grid-totals-bar__item">
+                  <span className="grid-totals-bar__label">Valor Total (OS)</span>
+                  <span className="grid-totals-bar__value">{`R$ ${formatOsMoney(totals.totalValue)}`}</span>
+                </div>
+                <div className="grid-totals-bar__item">
+                  <span className="grid-totals-bar__label">Total Já Pago</span>
+                  <span className="grid-totals-bar__value grid-totals-bar__value--success">
+                    {`R$ ${formatOsMoney(totals.paidValue)}`}
+                  </span>
+                </div>
+                <div className="grid-totals-bar__item">
+                  <span className="grid-totals-bar__label">Saldo a Receber</span>
+                  <span
+                    className={`grid-totals-bar__value ${
+                      totals.outstandingValue > 0 ? "grid-totals-bar__value--warning" : "grid-totals-bar__value--success"
+                    }`}
+                  >
+                    {`R$ ${formatOsMoney(totals.outstandingValue)}`}
+                  </span>
+                </div>
+              </div>
+            );
+          }}
           loading={loading}
           onCreate={openCreateWorkspace}
           onEdit={openServiceOrderWorkspace}
@@ -2199,6 +2279,7 @@ export function ServiceOrdersWorkspace() {
               : undefined
           }
           canPay={(row) => osCanOpenPay(row)}
+          payStateForRow={(row) => osRowPayState(row)}
           extraActions={(row) => {
             const mark = fiscalMarks[row.id];
             const emitReason = mark?.documentNo
@@ -2216,7 +2297,8 @@ export function ServiceOrdersWorkspace() {
                 />
                 {canWriteFiscal ? (
                   <button
-                    className="button-secondary"
+                    aria-label="Emitir NFS-e"
+                    className="grid-icon-btn"
                     disabled={!canEmit}
                     title={canEmit ? "Emitir NFS-e" : emitReason}
                     type="button"
@@ -2230,7 +2312,12 @@ export function ServiceOrdersWorkspace() {
                         .catch((error) => setMessage(formatWorkspaceMessage(error, "A pré-visualização da NFS-e não abriu.")));
                     }}
                   >
-                    Emitir NFS-e
+                    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
                   </button>
                 ) : null}
               </>

@@ -26,6 +26,8 @@ type AuthenticatedUser = {
   displayName: string;
   defaultBranchId: string | null;
   status?: string;
+  portraitMimeType?: string | null;
+  portraitBase64?: string | null;
 };
 
 type SessionRecord = {
@@ -113,6 +115,8 @@ type EmpresaResponse = {
   tradeName?: string | null;
   isDefault?: boolean;
   status?: string;
+  logoMimeType?: string | null;
+  logoBase64?: string | null;
 };
 
 const STORAGE_KEY = "anexsys.frontend.session.v2";
@@ -328,6 +332,8 @@ function mapEmpresas(input: EmpresaResponse[] | null): EmpresaOption[] {
       legalName: empresa.legalName,
       tradeName: empresa.tradeName ?? null,
       isDefault: Boolean(empresa.isDefault),
+      logoMimeType: empresa.logoMimeType ?? null,
+      logoBase64: empresa.logoBase64 ?? null,
     }));
 }
 

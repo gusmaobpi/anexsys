@@ -25,11 +25,61 @@ export type CadastroFilterField = {
   id: string;
   label: string;
   placeholder?: string;
-  kind?: "text" | "select";
+  kind?: "text" | "select" | "date";
   options?: { value: string; label: string }[];
   lookup?: boolean;
   maxLength?: number;
 };
+
+export type RowPayVisualState = "open" | "partial" | "paid" | "hidden";
+
+function EditNotebookIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" />
+      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+}
+
+function PowerIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+      <line x1="12" y1="2" x2="12" y2="12" />
+    </svg>
+  );
+}
+
+function CardPayIcon() {
+  return (
+    <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <line x1="2" y1="10" x2="22" y2="10" />
+    </svg>
+  );
+}
+
+function PaidCheckIcon() {
+  return (
+    <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+  );
+}
 
 function FilterToggleIcon({ open }: Readonly<{ open: boolean }>) {
   return (
@@ -94,6 +144,18 @@ type CadastroListPanelProps<T extends { id: string }> = {
   canInactivate?: (row: T) => boolean;
   onPay?: (row: T) => void;
   canPay?: (row: T) => boolean;
+  payStateForRow?: (row: T) => RowPayVisualState;
+  headerSummary?: (context: {
+    records: T[];
+    filteredRecords: T[];
+    appliedFilters: Record<string, string>;
+    setFilterValue: (key: string, value: string) => void;
+  }) => ReactNode;
+  footerSummary?: (context: {
+    records: T[];
+    filteredRecords: T[];
+    appliedFilters: Record<string, string>;
+  }) => ReactNode;
   extraActions?: (row: T) => ReactNode;
   rowMenu?: (row: T) => RowMenuItem[];
   excelFileName: string;
@@ -132,6 +194,9 @@ export function CadastroListPanel<T extends { id: string }>({
   canInactivate,
   onPay,
   canPay,
+  payStateForRow,
+  headerSummary,
+  footerSummary,
   extraActions,
   rowMenu,
   excelFileName,
@@ -192,6 +257,12 @@ export function CadastroListPanel<T extends { id: string }>({
     setAppliedFilters(next);
     setPage(1);
     setOpenMenu(null);
+  };
+
+  const setFilterValue = (key: string, value: string) => {
+    const next = { ...filters, [key]: value };
+    setFilters(next);
+    commitFilters(next);
   };
 
   const toggleColumn = (columnId: string, locked?: boolean) => {
@@ -418,6 +489,12 @@ export function CadastroListPanel<T extends { id: string }>({
                       </option>
                     ))}
                   </select>
+                ) : field.kind === "date" ? (
+                  <input
+                    onChange={(event) => setFilters((current) => ({ ...current, [field.id]: event.target.value }))}
+                    type="date"
+                    value={filters[field.id] ?? ""}
+                  />
                 ) : (
                   <input
                     maxLength={field.maxLength}
@@ -447,6 +524,15 @@ export function CadastroListPanel<T extends { id: string }>({
         </div>
       ) : null}
 
+      {headerSummary
+        ? headerSummary({
+            records,
+            filteredRecords,
+            appliedFilters,
+            setFilterValue,
+          })
+        : null}
+
       <div className="data-table-wrapper">
         <table className="data-table">
           <thead>
@@ -466,56 +552,101 @@ export function CadastroListPanel<T extends { id: string }>({
             </tr>
           </thead>
           <tbody>
-            {pagination.items.map((row) => (
-              <tr key={row.id}>
-                <td className="data-table__check">
-                  <input
-                    aria-label={`Selecionar ${rowLabel(row)}`}
-                    checked={selectedIds.includes(row.id)}
-                    onChange={() => toggleSelected(row.id)}
-                    type="checkbox"
-                  />
-                </td>
-                {visibleColumns.map((column) => (
-                  <td key={column.id}>{column.render(row)}</td>
-                ))}
-                <td>
-                  {canWrite || onPay || extraActions || rowMenu ? (
-                    <div className="table-actions">
-                      {canWrite ? (
-                        <button className="button-secondary" onClick={() => onEdit(row)} type="button">
-                          {editLabelForRow?.(row) ?? editLabel}
-                        </button>
-                      ) : null}
-                      {canWrite && onDelete ? (
-                        <button className="button-secondary" onClick={() => onDelete(row)} type="button">
-                          Excluir
-                        </button>
-                      ) : null}
-                      {canWrite && onInactivate ? (
-                        <button
-                          className="button-secondary"
-                          disabled={canInactivate ? !canInactivate(row) : false}
-                          onClick={() => onInactivate(row)}
-                          type="button"
-                        >
-                          Inativar
-                        </button>
-                      ) : null}
-                      {onPay && (canPay ? canPay(row) : true) ? (
-                        <button className="button-secondary" onClick={() => onPay(row)} type="button">
-                          Pagar
-                        </button>
-                      ) : null}
-                      {rowMenu ? <RowOverflowMenu items={rowMenu(row)} label={`Opções de ${rowLabel(row)}`} /> : null}
-                      {extraActions?.(row)}
-                    </div>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
+            {pagination.items.map((row) => {
+              const editText = editLabelForRow?.(row) ?? editLabel;
+              const resolvedPayState: RowPayVisualState = payStateForRow
+                ? payStateForRow(row)
+                : onPay && (canPay ? canPay(row) : true)
+                  ? "open"
+                  : "hidden";
+              return (
+                <tr key={row.id}>
+                  <td className="data-table__check">
+                    <input
+                      aria-label={`Selecionar ${rowLabel(row)}`}
+                      checked={selectedIds.includes(row.id)}
+                      onChange={() => toggleSelected(row.id)}
+                      type="checkbox"
+                    />
+                  </td>
+                  {visibleColumns.map((column) => (
+                    <td key={column.id}>{column.render(row)}</td>
+                  ))}
+                  <td>
+                    {canWrite || onPay || extraActions || rowMenu ? (
+                      <div className="table-actions">
+                        {canWrite ? (
+                          <button
+                            aria-label={`${editText} ${rowLabel(row)}`}
+                            className="grid-icon-btn"
+                            onClick={() => onEdit(row)}
+                            title={editText}
+                            type="button"
+                          >
+                            <EditNotebookIcon />
+                          </button>
+                        ) : null}
+                        {canWrite && onDelete ? (
+                          <button
+                            aria-label={`Excluir ${rowLabel(row)}`}
+                            className="grid-icon-btn grid-icon-btn--danger"
+                            onClick={() => onDelete(row)}
+                            title="Excluir"
+                            type="button"
+                          >
+                            <TrashIcon />
+                          </button>
+                        ) : null}
+                        {canWrite && onInactivate ? (
+                          <button
+                            aria-label={`Inativar ${rowLabel(row)}`}
+                            className="grid-icon-btn"
+                            disabled={canInactivate ? !canInactivate(row) : false}
+                            onClick={() => onInactivate(row)}
+                            title="Inativar / Ativar"
+                            type="button"
+                          >
+                            <PowerIcon />
+                          </button>
+                        ) : null}
+                        {onPay && resolvedPayState !== "hidden" ? (
+                          <button
+                            aria-label={
+                              resolvedPayState === "paid"
+                                ? `Pago ${rowLabel(row)}`
+                                : `A Pagar ${rowLabel(row)}`
+                            }
+                            className={`grid-pay-btn grid-pay-btn--${resolvedPayState}`}
+                            onClick={() => onPay(row)}
+                            title={
+                              resolvedPayState === "paid"
+                                ? "Pago — clique para ver comprovante ou estornar"
+                                : resolvedPayState === "partial"
+                                  ? "Pagamento parcial — clique para cobrar o saldo restante"
+                                  : "A Pagar — enviar cobrança para a maquininha"
+                            }
+                            type="button"
+                          >
+                            {resolvedPayState === "paid" ? <PaidCheckIcon /> : <CardPayIcon />}
+                            <span>
+                              {resolvedPayState === "paid"
+                                ? "Pago"
+                                : resolvedPayState === "partial"
+                                  ? "A Pagar (Saldo)"
+                                  : "A Pagar"}
+                            </span>
+                          </button>
+                        ) : null}
+                        {rowMenu ? <RowOverflowMenu items={rowMenu(row)} label={`Opções de ${rowLabel(row)}`} /> : null}
+                        {extraActions?.(row)}
+                      </div>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {!loading && pagination.totalItems === 0 ? (
               <tr>
                 <td colSpan={visibleColumns.length + 2}>
@@ -526,6 +657,14 @@ export function CadastroListPanel<T extends { id: string }>({
           </tbody>
         </table>
       </div>
+
+      {footerSummary
+        ? footerSummary({
+            records,
+            filteredRecords,
+            appliedFilters,
+          })
+        : null}
 
       <div className="cadastro-pagination">
         <p className="cadastro-pagination__summary">
