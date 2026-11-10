@@ -1,7 +1,7 @@
 "use client";
 
-import { WhatsappSettingsWorkspace } from "@/components/settings/whatsapp-settings-workspace";
+import { MessagingSettingsWorkspace } from "@/components/settings/messaging-settings-workspace";
 
 export default function WhatsappSettingsPage() {
-  return <WhatsappSettingsWorkspace />;
+  return <MessagingSettingsWorkspace />;
 }

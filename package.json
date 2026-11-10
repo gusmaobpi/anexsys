@@ -22,6 +22,7 @@
     "migration:show": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/platform/database/typeorm/data-source.ts migration:show",
     "dev:setup": "bash scripts/dev-setup.sh",
     "db:wait": "node scripts/wait-for-postgres.cjs",
+    "deploy:hml": "node scripts/deploy-lightsail.cjs",
     "start:web": "node scripts/start-web.cjs",
     "migration:run:prod": "node ./node_modules/typeorm/cli.js -d dist/platform/database/typeorm/data-source.js migration:run",
     "test:unit": "tsx --test test/unit/**/*.spec.ts",

@@ -135,16 +135,11 @@ const navSections: NavSection[] = [
         requiredPermissions: ["finance.read"],
       },
       {
-        href: "/settings/whatsapp",
-        label: "WhatsApp",
-        hint: "Número, modelos e horário de envio",
-        requiredPermissions: ["whatsapp.write"],
-      },
-      {
-        href: "/settings/email",
-        label: "E-mail",
-        hint: "Caixa de saída da Conta",
-        requiredPermissions: ["email.write"],
+        href: "/settings/messaging",
+        label: "Mensageria",
+        hint: "E-mail, WhatsApp e SMS",
+        requiredPermissions: ["email.write", "whatsapp.write"],
+        permissionMatch: "any",
       },
       {
         href: "/settings/privacy",

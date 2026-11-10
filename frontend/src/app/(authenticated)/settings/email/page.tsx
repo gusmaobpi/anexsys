@@ -1,7 +1,7 @@
 "use client";
 
-import { EmailSettingsWorkspace } from "@/components/settings/email-settings-workspace";
+import { MessagingSettingsWorkspace } from "@/components/settings/messaging-settings-workspace";
 
 export default function EmailSettingsPage() {
-  return <EmailSettingsWorkspace />;
+  return <MessagingSettingsWorkspace />;
 }

@@ -1,0 +1,24 @@
+name: Deploy Homolog Lightsail
+
+on:
+  push:
+    branches:
+      - homolog
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH to AWS Lightsail
+        if: ${{ secrets.LIGHTSAIL_SSH_KEY != '' }}
+        env:
+          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          SSH_HOST: ${{ secrets.LIGHTSAIL_HOST || '18.191.157.58' }}
+          SSH_USER: ${{ secrets.LIGHTSAIL_USER || 'ubuntu' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_deploy "${SSH_USER}@${SSH_HOST}" "set -e && cd ~/anexsys-platform && git fetch origin homolog && git checkout homolog && git pull --ff-only origin homolog && npm run build && npm run migration:run:prod && npm run frontend:build && pm2 restart anexsys-homolog --update-env && pm2 restart anexsys-frontend --update-env && pm2 save"

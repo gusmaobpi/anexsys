@@ -492,7 +492,7 @@ export function PaymentProvidersWorkspace() {
                   + Adicionar credencial
                 </button>
                 <small className="table-subtle">
-                  As chaves variam por operadora. Ex.: clientId, clientSecret, merchantId.
+                  Cielo: as chaves têm de ser exatamente clientId, accessToken e merchantId. O texto longo do portal entra em accessToken. Não use clientSecret.
                 </small>
               </div>
               {workspaceMode !== "new" ? (

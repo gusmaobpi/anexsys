@@ -88,7 +88,7 @@ export function WhatsappNoticesWorkspace() {
         <div className="workspace-toolbar">
           <div className="workspace-toolbar__copy">
             <h3>Avisos</h3>
-            <p className="table-subtle">A mensagem só fica enviada quando a Meta confirma. Aceita pela Meta ainda espera essa confirmação.</p>
+            <p className="table-subtle">Pela Zenvia, o aviso fica enviado quando a API aceita. Pela Meta, Aceita pela Meta ainda espera a confirmação.</p>
           </div>
           <div className="button-row">
             <button className="button-secondary" onClick={() => void load()} type="button">

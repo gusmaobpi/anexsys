@@ -17,6 +17,7 @@ import {
   whatsappMetaBody,
   whatsappParameterValues,
 } from './whatsapp.rules';
+import { sendZenviaWhatsappText } from 'src/modules/messaging/application/zenvia-whatsapp';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 
@@ -332,9 +333,35 @@ async function deliverMessage(sql: Sql, tenantId: string, messageId: string): Pr
     );
     return;
   }
-  const values = messageValues(context, settings.public_link_origin);
+  const origin = await resolvePublicLinkOrigin(sql, tenantId, settings.public_link_origin);
+  const values = messageValues(context, origin);
   const preview = renderWhatsappBody(template.body, values);
   const phone = toWhatsappDigits(context.phone);
+  const zenvia = await loadZenviaChannel(sql, tenantId);
+  if (zenvia) {
+    const blocked = zenviaBlockReason(phone, values.link);
+    if (blocked) {
+      await sql.query(
+        `UPDATE whatsapp_messages
+         SET status = 'failed', body_snapshot = $2, to_phone = $3, last_error = $4, updated_at = now()
+         WHERE id = $1`,
+        [messageId, preview, phone, blocked],
+      );
+      return;
+    }
+    const sent = await sendZenviaWhatsappText({ token: zenvia.token, from: zenvia.from, to: phone, text: preview });
+    if (sent.ok) {
+      await sql.query(
+        `UPDATE whatsapp_messages
+         SET status = 'sent', body_snapshot = $2, to_phone = $3, meta_message_id = $4, sent_at = now(), last_error = NULL, updated_at = now()
+         WHERE id = $1`,
+        [messageId, preview, phone, sent.messageId],
+      );
+      return;
+    }
+    await failMessage(sql, messageId, message.attempt_count, settings.max_attempts, settings.retry_interval_minutes, sent.error, preview, phone);
+    return;
+  }
   const blocked = blockReason(settings, template, phone, values.link);
   if (blocked) {
     await sql.query(
@@ -382,6 +409,39 @@ async function failMessage(
      WHERE id = $1`,
     [messageId, status, nextAttempt, error.slice(0, 500), preview ?? null, phone ?? null, String(retryMinutes)],
   );
+}
+
+async function loadZenviaChannel(sql: Sql, tenantId: string): Promise<{ token: string; from: string } | null> {
+  const rows = await sql.query(
+    `SELECT zenvia_api_token, whatsapp_sender FROM messaging_channels WHERE tenant_id = $1 LIMIT 1`,
+    [tenantId],
+  );
+  const row = rows[0] as { zenvia_api_token?: string; whatsapp_sender?: string } | undefined;
+  const token = row?.zenvia_api_token?.trim() ?? '';
+  const from = row?.whatsapp_sender?.trim() ?? '';
+  if (!token || !from) {
+    return null;
+  }
+  return { token, from };
+}
+
+async function resolvePublicLinkOrigin(sql: Sql, tenantId: string, whatsappOrigin: string | null | undefined): Promise<string> {
+  const current = whatsappOrigin?.trim() ?? '';
+  if (current) {
+    return current;
+  }
+  const rows = await sql.query(`SELECT public_link_origin FROM email_settings WHERE tenant_id = $1 LIMIT 1`, [tenantId]);
+  return String(rows[0]?.public_link_origin ?? '').trim();
+}
+
+function zenviaBlockReason(phone: string, link: string): string | null {
+  if (phone.length < 12) {
+    return 'O cliente não tem WhatsApp válido.';
+  }
+  if (!link.startsWith('http')) {
+    return 'Informe a origem do link na Mensageria, no bloco de e-mail.';
+  }
+  return null;
 }
 
 function blockReason(settings: SettingsRow, template: TemplateRow, phone: string, link: string): string | null {
