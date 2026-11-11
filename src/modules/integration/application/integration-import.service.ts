@@ -191,27 +191,31 @@ export class IntegrationImportService {
   ): Promise<CatalogRef> {
     const existingId = await this.findCustomerId(tenantId, legacyCode);
     if (!existingId) {
-      const status = mapCustomerStatus(requireCell(row, statusHeader));
+      const statusText = cell(row, statusHeader);
+      const status = statusText ? mapCustomerStatus(statusText) : CustomerStatus.ACTIVE;
+      const typeText = cell(row, 'Tipo de cliente');
+      const consentText = cell(row, 'Autoriza aviso por WhatsApp');
       const created = await this.customerService.create({
         tenantId,
         actorUserId,
-        customerType: mapCustomerType(requireCell(row, 'Tipo de cliente')),
+        allowIncompleteImport: true,
+        customerType: typeText ? mapCustomerType(typeText) : mapCustomerType('Pessoa'),
         fullName: requireCell(row, 'Nome completo / razão social'),
         tradeName: cell(row, 'Nome fantasia') || undefined,
-        mobilePhone: requireCell(row, 'Celular / WhatsApp').replace(/\D/g, ''),
+        mobilePhone: cell(row, 'Celular / WhatsApp').replace(/\D/g, ''),
         cpf: cell(row, 'CPF ou CNPJ').replace(/\D/g, '') || undefined,
         email: cell(row, 'E-mail') || cell(row, 'Email') || undefined,
         birthDate: cell(row, 'Data de nascimento') || undefined,
-        postalCode: requireCell(row, 'CEP').replace(/\D/g, ''),
-        street: requireCell(row, 'Rua'),
-        number: requireCell(row, 'Número'),
+        postalCode: cell(row, 'CEP').replace(/\D/g, '') || undefined,
+        street: cell(row, 'Rua'),
+        number: cell(row, 'Número'),
         complement: cell(row, 'Complemento') || undefined,
-        district: requireCell(row, 'Bairro'),
-        city: requireCell(row, 'Cidade'),
-        state: requireCell(row, 'Estado').toUpperCase(),
-        country: requireCell(row, 'País'),
+        district: cell(row, 'Bairro'),
+        city: cell(row, 'Cidade'),
+        state: cell(row, 'Estado').toUpperCase(),
+        country: cell(row, 'País'),
         observations: cell(row, 'Observações do cliente') || cell(row, 'Observações') || undefined,
-        whatsappConsent: mapYesNo(requireCell(row, 'Autoriza aviso por WhatsApp'), 'Autoriza aviso por WhatsApp'),
+        whatsappConsent: consentText ? mapYesNo(consentText, 'Autoriza aviso por WhatsApp') : false,
       });
       await this.dataSource.query(`UPDATE customers SET legacy_code = $1 WHERE id = $2 AND tenant_id = $3`, [legacyCode, created.id, tenantId]);
       if (status === CustomerStatus.INACTIVE) await this.customerService.update(created.id, tenantId, { actorUserId, status });
@@ -646,7 +650,9 @@ export class IntegrationImportService {
     const tradeName = cell(row, 'Nome fantasia');
     if (tradeName && !sameName(customer.tradeName ?? '', tradeName)) changes.tradeName = tradeName;
     const phone = cell(row, 'Celular / WhatsApp').replace(/\D/g, '');
-    if (phone && phone !== (customer.phone ?? '').replace(/\D/g, '')) changes.mobilePhone = phone;
+    if (phone.length >= 10 && phone.length <= 13 && phone !== (customer.phone ?? '').replace(/\D/g, '')) {
+      changes.mobilePhone = phone;
+    }
     const document = cell(row, 'CPF ou CNPJ').replace(/\D/g, '');
     if (document && document !== (customer.cpfCnpj ?? '').replace(/\D/g, '')) changes.cpf = document;
     const email = cell(row, 'E-mail') || cell(row, 'Email');
@@ -655,7 +661,9 @@ export class IntegrationImportService {
     const currentBirth = customer.birthDate ? String(customer.birthDate).slice(0, 10) : '';
     if (birthDate && birthDate !== currentBirth) changes.birthDate = birthDate;
     const postalCode = cell(row, 'CEP').replace(/\D/g, '');
-    if (postalCode && postalCode !== (customer.postalCode ?? '').replace(/\D/g, '')) changes.postalCode = postalCode;
+    if (postalCode.length === 8 && postalCode !== (customer.postalCode ?? '').replace(/\D/g, '')) {
+      changes.postalCode = postalCode;
+    }
     const street = cell(row, 'Rua');
     if (street && !sameName(customer.street ?? '', street)) changes.street = street;
     const number = cell(row, 'Número');

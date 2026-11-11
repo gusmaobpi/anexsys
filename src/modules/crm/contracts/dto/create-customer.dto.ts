@@ -71,4 +71,8 @@ export class CreateCustomerDto extends CreateCustomerRequestDto {
 
   @IsUUID()
   actorUserId!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  allowIncompleteImport?: boolean;
 }

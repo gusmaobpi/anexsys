@@ -388,4 +388,47 @@ describe('CustomerService', () => {
     );
     assert.equal(customer.isDeleted, false);
   });
+
+  it('creates an imported customer when phone and address are missing', async () => {
+    const service = new CustomerService(
+      buildTransactionDataSource() as never,
+      {
+        create(payload: Record<string, unknown>) {
+          return payload;
+        },
+        async findByTenantAndDocument() {
+          return null;
+        },
+      } as never,
+      {} as never,
+      {} as never,
+      { async getById() { return { id: 'tenant-1' }; } } as never,
+      { async record() {} } as never,
+      { async assertCustomerCanInactivate() {} } as never,
+    );
+
+    const customer = await service.create({
+      tenantId: 'tenant-1',
+      actorUserId: 'actor-1',
+      allowIncompleteImport: true,
+      customerType: CustomerType.PERSON,
+      fullName: 'Daniela Caetano',
+      mobilePhone: '11',
+      postalCode: '',
+      street: '',
+      number: '',
+      district: '',
+      city: 'São Paulo',
+      state: 'SP',
+      country: 'Brasil',
+    });
+
+    assert.equal(customer.legalName, 'Daniela Caetano');
+    assert.equal(customer.phone, '');
+    assert.equal(customer.postalCode, null);
+    assert.equal(customer.street, null);
+    assert.equal(customer.number, null);
+    assert.equal(customer.district, null);
+    assert.equal(customer.city, 'São Paulo');
+  });
 });

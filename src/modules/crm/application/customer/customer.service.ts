@@ -44,13 +44,16 @@ export class CustomerService {
   async create(dto: CreateCustomerDto): Promise<CustomerEntity> {
     await this.tenantService.getById(dto.tenantId);
 
-    const normalizedPhone = this.normalizePhone(dto.mobilePhone);
+    const allowIncomplete = dto.allowIncompleteImport === true;
+    const normalizedPhone = allowIncomplete ? this.normalizeImportedPhone(dto.mobilePhone) : this.normalizePhone(dto.mobilePhone);
     const customerType = dto.customerType ?? CustomerType.PERSON;
     const normalizedEmail = this.normalizeEmail(dto.email);
     const normalizedCpf = this.normalizeCpfOrCnpj(dto.cpf, customerType);
-    const normalizedPostalCode = this.normalizePostalCode(dto.postalCode);
+    const normalizedPostalCode = allowIncomplete
+      ? this.normalizeImportedPostalCode(dto.postalCode)
+      : this.normalizePostalCode(dto.postalCode);
     const normalizedBirthDate = this.normalizeBirthDate(dto.birthDate);
-    const normalizedAddress = this.normalizeAddress(dto);
+    const normalizedAddress = allowIncomplete ? this.normalizeImportedAddress(dto) : this.normalizeAddress(dto);
     await this.assertUniqueDocument(dto.tenantId, normalizedCpf);
 
     const customer = this.customerRepository.create({
@@ -331,6 +334,30 @@ export class CustomerService {
     }
 
     return normalized;
+  }
+
+  private normalizeImportedPhone(value?: string | null): string {
+    const normalized = (value ?? '').replace(/\D/g, '');
+    return normalized.length >= 10 && normalized.length <= 13 ? normalized : '';
+  }
+
+  private normalizeImportedPostalCode(value?: string | null): string | null {
+    const normalized = (value ?? '').replace(/\D/g, '');
+    return normalized.length === 8 ? normalized : null;
+  }
+
+  private normalizeImportedAddress(
+    input: Pick<CreateCustomerDto, 'street' | 'number' | 'complement' | 'district' | 'city' | 'state' | 'country'>,
+  ) {
+    return {
+      street: this.normalizeOptionalAddressField(input.street),
+      number: this.normalizeOptionalAddressField(input.number),
+      complement: this.normalizeOptionalAddressField(input.complement),
+      district: this.normalizeOptionalAddressField(input.district),
+      city: this.normalizeOptionalAddressField(input.city),
+      state: this.normalizeOptionalAddressField(input.state),
+      country: this.normalizeOptionalAddressField(input.country),
+    };
   }
 
   private normalizeEmail(value?: string | null): string | null {
