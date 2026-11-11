@@ -86,17 +86,19 @@ function sheetRows(xml: string, strings: string[]) {
   const rows: string[][] = [];
   for (const row of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
     const values: string[] = [];
-    for (const cell of row[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
-      const ref = /r="([A-Z]+\d+)"/.exec(cell[1])?.[1] ?? "";
-      const type = /t="([^"]+)"/.exec(cell[1])?.[1] ?? "";
+    for (const cell of row[1].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+      const attrs = cell[1] ?? "";
+      const inner = cell[2] ?? "";
+      const ref = /r="([A-Z]+\d+)"/.exec(attrs)?.[1] ?? "";
+      const type = /t="([^"]+)"/.exec(attrs)?.[1] ?? "";
       const index = ref ? columnIndex(ref) : values.length;
       let text = "";
       if (type === "inlineStr") {
-        text = decodeXml(/<t[^>]*>([\s\S]*?)<\/t>/.exec(cell[2])?.[1] ?? "");
+        text = decodeXml(/<t[^>]*>([\s\S]*?)<\/t>/.exec(inner)?.[1] ?? "");
       } else if (type === "s") {
-        text = strings[Number(/<v>([\s\S]*?)<\/v>/.exec(cell[2])?.[1] ?? "")] ?? "";
-      } else if (type !== "e") {
-        text = /<v>([\s\S]*?)<\/v>/.exec(cell[2])?.[1] ?? "";
+        text = strings[Number(/<v>([\s\S]*?)<\/v>/.exec(inner)?.[1] ?? "")] ?? "";
+      } else if (type !== "e" && inner) {
+        text = /<v>([\s\S]*?)<\/v>/.exec(inner)?.[1] ?? "";
       }
       values[index] = text;
     }
@@ -108,16 +110,17 @@ function sheetRows(xml: string, strings: string[]) {
 function layoutSheetPath(files: Map<string, Uint8Array>) {
   const workbook = new TextDecoder().decode(files.get("xl/workbook.xml") ?? new Uint8Array());
   const rels = new TextDecoder().decode(files.get("xl/_rels/workbook.xml.rels") ?? new Uint8Array());
-  const sheet = /<sheet\b[^>]*name="Layout"[^>]*r:id="([^"]+)"/.exec(workbook)
+  const named = /<sheet\b[^>]*name="Layout"[^>]*r:id="([^"]+)"/.exec(workbook)
     ?? /<sheet\b[^>]*r:id="([^"]+)"[^>]*name="Layout"/.exec(workbook);
-  const relationId = sheet?.[1];
+  const first = /<sheet\b[^>]*r:id="([^"]+)"/.exec(workbook);
+  const relationId = named?.[1] ?? first?.[1];
   if (!relationId) {
-    throw new Error("A planilha precisa ter a aba Layout.");
+    throw new Error("A planilha não tem aba para ler.");
   }
   const target = new RegExp(`Id="${relationId}"[^>]*Target="([^"]+)"`).exec(rels)?.[1]
     ?? new RegExp(`Target="([^"]+)"[^>]*Id="${relationId}"`).exec(rels)?.[1];
   if (!target) {
-    throw new Error("A planilha precisa ter a aba Layout.");
+    throw new Error("A planilha não tem aba para ler.");
   }
   return target.startsWith("/") ? target.slice(1) : `xl/${target.replace(/^\.\.\//, "")}`;
 }
@@ -128,7 +131,7 @@ export async function readLayoutRows(file: File) {
   const sheetPath = layoutSheetPath(files);
   const sheet = files.get(sheetPath) ?? files.get(sheetPath.replace(/^xl\//, ""));
   if (!sheet) {
-    throw new Error("A planilha precisa ter a aba Layout.");
+    throw new Error("A planilha não tem aba para ler.");
   }
   const strings = sharedStrings(new TextDecoder().decode(files.get("xl/sharedStrings.xml") ?? new Uint8Array()));
   const rows = sheetRows(new TextDecoder().decode(sheet), strings);
