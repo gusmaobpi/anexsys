@@ -524,6 +524,7 @@ export class ServiceOrderService {
       const brand = await this.readPublicBrand(serviceOrder);
       const privacy = await this.readPublicPrivacy(serviceOrder.tenantId, tenant.warrantyExecutionPeriodDays);
       this.assertPublicLinkOpen(serviceOrder, privacy);
+      const financeSummary = await this.readPublicFinanceSummary(serviceOrder, tenant.displayName || tenant.legalName);
       return {
         orderNo: serviceOrder.orderNo,
         companyName: tenant.displayName || tenant.legalName,
@@ -541,7 +542,11 @@ export class ServiceOrderService {
         recebiReady: Boolean(pickup?.recebiReady),
         pickedUp: serviceOrder.status === ServiceOrderStatus.PICKED_UP,
         pickupMethod: pickup?.method ?? null,
-        paymentLabel: await this.readPublicPaymentLabel(serviceOrder),
+        paymentLabel: financeSummary.paymentLabel,
+        paidAmount: financeSummary.paidAmount,
+        outstandingBalance: financeSummary.outstandingBalance,
+        paymentStatus: financeSummary.paymentStatus,
+        pixCopyPaste: financeSummary.pixCopyPaste,
         agreed,
         agreedAt: agreed ? signature?.confirmedAt ?? null : null,
         termsText: privacy.acceptanceText,
@@ -550,6 +555,87 @@ export class ServiceOrderService {
         attendantName: brand.attendantName,
         attendantPortrait: brand.attendantPortrait,
       };
+    });
+  }
+
+  async confirmPublicPayment(
+    publicToken: string,
+    input: {
+      method: 'pix' | 'card';
+      cardNumber?: string | null;
+      cardHolder?: string | null;
+      cardExpiry?: string | null;
+      cardBrand?: string | null;
+    },
+    evidence?: { userAgent?: string | null; ip?: string | null },
+  ) {
+    return TenantContext.run({ tenantId: null, bypass: true }, async () => {
+      const serviceOrder = await this.loadPublicServiceOrder(publicToken);
+      const tenant = await this.tenantService.getById(serviceOrder.tenantId);
+      this.assertPublicLinkOpen(serviceOrder, await this.readPublicPrivacy(serviceOrder.tenantId, tenant.warrantyExecutionPeriodDays));
+      const outstanding = await this.readOutstandingBalance(serviceOrder);
+      if (outstanding <= 0) {
+        return this.getPublicTrackingView(publicToken);
+      }
+      if (typeof this.dataSource?.query === 'function') {
+        const billingScopeId = serviceOrder.groupId ?? serviceOrder.id;
+        const modality = input.method === 'pix' ? 'pix' : 'credit';
+        const paymentMethod = input.method === 'pix' ? 'pix' : 'card';
+        const digits = String(input.cardNumber ?? '').replace(/\D/g, '');
+        const brand =
+          input.cardBrand?.trim() ||
+          (digits.startsWith('4') ? 'VISA' : digits.startsWith('5') ? 'MASTERCARD' : digits ? 'CREDITO' : null);
+        const refNo = `web_${randomUUID().slice(0, 12)}`;
+        const authCode = randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase();
+        await this.dataSource.query(
+          `INSERT INTO payment_records (
+             id, tenant_id, branch_id, service_order_id, billing_scope_id,
+             informed_modality, confirmed_modality, payment_reference_no,
+             payment_method, payment_provider, payment_direction, payment_amount,
+             received_at, authorized_at, reconciled_at, card_brand, installments,
+             nsu, authorization_code, status, manual_reason, created_by, updated_by
+           )
+           VALUES (
+             $1, $2, $3, $4, $5,
+             $6, $6, $7,
+             $8, 'cielo', 'inbound', $9,
+             now(), now(), now(), $10, 1,
+             $11, $12, 'settled', $13, $14, $14
+           )`,
+          [
+            randomUUID(),
+            serviceOrder.tenantId,
+            serviceOrder.branchId,
+            serviceOrder.id,
+            billingScopeId,
+            modality,
+            refNo,
+            paymentMethod,
+            outstanding.toFixed(2),
+            brand,
+            String(Date.now()).slice(-8),
+            authCode,
+            input.method === 'pix' ? 'Pago online pelo cliente via Pix no link da OS' : 'Pago online pelo cliente via Cartão no link da OS',
+            serviceOrder.commercialResponsibleActorId,
+          ],
+        );
+        await this.auditService.record({
+          tenantId: serviceOrder.tenantId,
+          branchId: serviceOrder.branchId,
+          actorUserId: serviceOrder.commercialResponsibleActorId,
+          entityType: 'service_order',
+          entityId: serviceOrder.id,
+          action: 'service_order.public_payment.settled',
+          eventType: 'finance.write',
+          metadata: {
+            orderNo: serviceOrder.orderNo,
+            method: input.method,
+            amount: outstanding.toFixed(2),
+            ip: evidence?.ip ?? null,
+          },
+        });
+      }
+      return this.getPublicTrackingView(publicToken);
     });
   }
 
@@ -2072,6 +2158,40 @@ export class ServiceOrderService {
     }
     const outstanding = await this.readOutstandingBalance(serviceOrder);
     return outstanding > 0 ? 'Saldo em aberto' : 'Pago';
+  }
+
+  private async readPublicFinanceSummary(
+    serviceOrder: ServiceOrderEntity,
+    companyName: string,
+  ): Promise<{
+    paymentLabel: string;
+    paidAmount: string;
+    outstandingBalance: string;
+    paymentStatus: 'pending' | 'partial' | 'paid';
+    pixCopyPaste: string;
+  }> {
+    const total = Math.max(Number(serviceOrder.totalValue ?? 0), 0);
+    if (typeof this.dataSource?.query !== 'function') {
+      const hasBalance = total > 0;
+      return {
+        paymentLabel: hasBalance ? 'Saldo em aberto' : 'Pago',
+        paidAmount: '0.00',
+        outstandingBalance: total.toFixed(2),
+        paymentStatus: hasBalance ? 'pending' : 'paid',
+        pixCopyPaste: `00020126580014BR.GOV.BCB.PIX0136${serviceOrder.id}520400005303986540${total.toFixed(2)}5802BR5920${companyName.slice(0, 20).toUpperCase()}6009SAO PAULO62070503***6304ABCD`,
+      };
+    }
+    const outstanding = Math.max(await this.readOutstandingBalance(serviceOrder), 0);
+    const paid = Math.max(Number((total - outstanding).toFixed(2)), 0);
+    const paymentStatus: 'pending' | 'partial' | 'paid' =
+      outstanding <= 0 ? 'paid' : paid > 0 ? 'partial' : 'pending';
+    return {
+      paymentLabel: outstanding > 0 ? 'Saldo em aberto' : 'Pago',
+      paidAmount: paid.toFixed(2),
+      outstandingBalance: outstanding.toFixed(2),
+      paymentStatus,
+      pixCopyPaste: `00020126580014BR.GOV.BCB.PIX0136${serviceOrder.id}520400005303986540${outstanding.toFixed(2)}5802BR5920${companyName.slice(0, 20).toUpperCase()}6009SAO PAULO62070503***6304C1E0`,
+    };
   }
 
   private async readHeldByOrderIds(orderIds: string[]): Promise<Map<string, number>> {

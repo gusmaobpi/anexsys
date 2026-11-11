@@ -6,7 +6,7 @@ export function publicOsBackendUrl(token: string, suffix = "") {
 
 export async function proxyPublicOsRequest(
   token: string,
-  init?: RequestInit & { action?: "recebi" | "concordo" },
+  init?: RequestInit & { action?: "recebi" | "concordo" | "pay" },
 ): Promise<Response> {
   const suffix = init?.action ? `/${init.action}` : "";
   try {

@@ -27,6 +27,10 @@ export type PublicOsTrackingView = {
   pickedUp: boolean;
   pickupMethod?: string | null;
   paymentLabel: string;
+  paidAmount?: string | null;
+  outstandingBalance?: string | null;
+  paymentStatus?: "pending" | "partial" | "paid" | null;
+  pixCopyPaste?: string | null;
   agreed?: boolean;
   agreedAt?: string | null;
   termsText?: string | null;
@@ -112,4 +116,33 @@ export function toPublicOsPrintView(view: PublicOsTrackingView): OsPrintView {
     totalValue: view.totalValue ?? null,
     customerNotes: view.customerNotes ?? null,
   };
+}
+
+export function resolvePublicOsStageIndex(status: string): number {
+  if (status === "picked_up") return 4;
+  if (status === "ready_for_pickup") return 3;
+  if (status === "quality" || status === "awaiting_quality") return 2;
+  if (status === "in_production" || status === "awaiting_proof" || status === "in_rework") return 1;
+  return 0;
+}
+
+export function formatCardNumberDisplay(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 16);
+  return digits.replace(/(\d{4})(?=\d)/g, "$1 ").trim();
+}
+
+export function formatCardExpiryDisplay(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+}
+
+export function detectCardBrandLabel(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "Visa · Master · Elo · Amex";
+  if (digits.startsWith("4")) return "VISA detectado ✓";
+  if (/^5[1-5]/.test(digits) || /^2[2-7]/.test(digits)) return "MASTERCARD detectado ✓";
+  if (/^(4011|4312|4389|4514|4576|5041|5066|5090|6277|6362|6363|650|651|655)/.test(digits)) return "ELO detectado ✓";
+  if (/^3[47]/.test(digits)) return "AMEX detectado ✓";
+  return "Cartão de crédito ✓";
 }

@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Headers, Inject, Ip, Param, Post, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, Inject, Ip, Param, Post, UnauthorizedException } from '@nestjs/common';
 import { Public } from 'src/platform/auth/public.decorator';
 import { DomainValidationError } from 'src/shared/errors/domain-validation.error';
 import { EntityNotFoundError } from 'src/shared/errors/entity-not-found.error';
@@ -73,6 +73,49 @@ export class PublicServiceOrdersController {
         throw error;
       }
       console.error('[public-os] POST recebi failed', publicToken, error);
+      throw error;
+    }
+  }
+
+  @Public()
+  @Post(':publicToken/pay')
+  @Header('X-Robots-Tag', 'noindex, nofollow')
+  async confirmPay(
+    @Param('publicToken') publicToken: string,
+    @Body()
+    body: {
+      method?: 'pix' | 'card';
+      cardNumber?: string | null;
+      cardHolder?: string | null;
+      cardExpiry?: string | null;
+      cardBrand?: string | null;
+    },
+    @Headers('user-agent') userAgent: string | undefined,
+    @Ip() ip: string,
+  ) {
+    if (!publicToken) {
+      throw new UnauthorizedException('O link da OS é obrigatório.');
+    }
+    try {
+      return await this.serviceOrderService.confirmPublicPayment(
+        publicToken,
+        {
+          method: body?.method === 'card' ? 'card' : 'pix',
+          cardNumber: body?.cardNumber ?? null,
+          cardHolder: body?.cardHolder ?? null,
+          cardExpiry: body?.cardExpiry ?? null,
+          cardBrand: body?.cardBrand ?? null,
+        },
+        {
+          userAgent: userAgent ?? null,
+          ip: ip ?? null,
+        },
+      );
+    } catch (error) {
+      if (error instanceof EntityNotFoundError || error instanceof DomainValidationError) {
+        throw error;
+      }
+      console.error('[public-os] POST pay failed', publicToken, error);
       throw error;
     }
   }
