@@ -427,6 +427,10 @@ export function ServiceOrdersWorkspace() {
     pickupPhoto: string | null;
     loading: boolean;
   } | null>(null);
+  const [customerViewTarget, setCustomerViewTarget] = useState<{
+    orderNo: string;
+    publicToken: string;
+  } | null>(null);
   const latestDetailRequestId = useRef(0);
 
   const activeCompany = session?.companies.find((company) => company.tenantId === session?.tenantId) ?? null;
@@ -1217,8 +1221,37 @@ export function ServiceOrdersWorkspace() {
     [apiJson, canWriteProof, isListWorkspace, loadOrders, printProductionOrder, selectedOrder],
   );
 
+  const openCustomerPreview = useCallback(
+    (row: Pick<ServiceOrderRecord, "id" | "orderNo" | "publicToken">) => {
+      if (row.publicToken) {
+        setCustomerViewTarget({ orderNo: row.orderNo, publicToken: row.publicToken });
+        return;
+      }
+      void apiJson<ServiceOrderDetail>(`/service-orders/${row.id}/details`)
+        .then((loaded) => {
+          const token = loaded.serviceOrder?.publicToken;
+          if (!token) {
+            setMessage("Esta OS ainda não tem link público para exibir a visão do cliente.");
+            return;
+          }
+          setCustomerViewTarget({ orderNo: row.orderNo, publicToken: token });
+        })
+        .catch((error) => {
+          setMessage(formatWorkspaceMessage(error, "A visão do cliente não pôde ser aberta."));
+        });
+    },
+    [apiJson],
+  );
+
   const buildOsRowMenu = useCallback(
-    (row: Pick<ServiceOrderRecord, "id" | "orderNo" | "status" | "bagClosed">): RowMenuItem[] => [
+    (row: Pick<ServiceOrderRecord, "id" | "orderNo" | "status" | "bagClosed" | "publicToken">): RowMenuItem[] => [
+      {
+        id: "customer-view",
+        label: "Visão do cliente",
+        onSelect: () => {
+          openCustomerPreview(row);
+        },
+      },
       ...(canSendToProof(row.status, Boolean(row.bagClosed)) && canWriteProof
         ? [
             {
@@ -1318,6 +1351,7 @@ export function ServiceOrdersWorkspace() {
       canWriteProof,
       handleProofAction,
       openApprovalPanel,
+      openCustomerPreview,
       openPickupPanel,
       printProductionOrder,
       printServiceOrder,
@@ -2320,6 +2354,20 @@ export function ServiceOrdersWorkspace() {
                     </svg>
                   </button>
                 ) : null}
+                <button
+                  aria-label={`Visão do cliente da OS ${row.orderNo}`}
+                  className="grid-icon-btn"
+                  title="Visão do cliente (formulário do WhatsApp)"
+                  type="button"
+                  onClick={() => {
+                    openCustomerPreview(row);
+                  }}
+                >
+                  <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
               </>
             );
           }}
@@ -2444,6 +2492,58 @@ export function ServiceOrdersWorkspace() {
         </div>
       ) : null}
 
+      {customerViewTarget ? (
+        <div aria-labelledby="os-customer-preview-title" aria-modal="true" className="os-anexo-lightbox" role="dialog">
+          <button
+            aria-label="Fechar visão do cliente"
+            className="os-anexo-lightbox__backdrop"
+            onClick={() => setCustomerViewTarget(null)}
+            type="button"
+          />
+          <div className="os-anexo-lightbox__card os-customer-preview-modal">
+            <div className="os-customer-preview-modal__head">
+              <div>
+                <h2 id="os-customer-preview-title">Visão do cliente · OS {customerViewTarget.orderNo}</h2>
+                <span>Espelho fiel do formulário que o cliente recebe pelo WhatsApp</span>
+              </div>
+              <div className="os-customer-preview-modal__actions">
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}/os/${customerViewTarget.publicToken}`;
+                    void navigator.clipboard.writeText(url).then(() => {
+                      setMessage(`Link do cliente da OS ${customerViewTarget.orderNo} copiado.`);
+                    });
+                  }}
+                >
+                  Copiar link
+                </button>
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={() => {
+                    window.open(`/os/${customerViewTarget.publicToken}?preview=1`, "_blank", "noopener,noreferrer");
+                  }}
+                >
+                  Abrir em nova guia
+                </button>
+                <button className="button-secondary" type="button" onClick={() => setCustomerViewTarget(null)}>
+                  Fechar
+                </button>
+              </div>
+            </div>
+            <div className="os-customer-preview-modal__frame-wrap">
+              <iframe
+                className="os-customer-preview-modal__frame"
+                src={`/os/${customerViewTarget.publicToken}?preview=1`}
+                title={`Formulário do cliente da OS ${customerViewTarget.orderNo}`}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
         {!isListWorkspace ? (
         <article className="mini-card cadastro-form os-form">
           <div className="workspace-toolbar">
@@ -2467,7 +2567,7 @@ export function ServiceOrdersWorkspace() {
                   {" · "}
                   <button
                     className="button-ghost"
-                    onClick={() => window.open(`/os/${selectedOrder.publicToken}?preview=1`, "_blank", "noopener,noreferrer")}
+                    onClick={() => openCustomerPreview(selectedOrder)}
                     type="button"
                   >
                     Ver formulário do cliente
