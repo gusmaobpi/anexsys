@@ -1,6 +1,7 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { execFileSync } from 'child_process';
 import { createSecureContext } from 'tls';
-import { randomUUID } from 'crypto';
+import { randomUUID, X509Certificate } from 'crypto';
 import { DataSource } from 'typeorm';
 import { AuditService } from 'src/modules/audit/application/audit/audit.service';
 import { TenantContext } from 'src/platform/tenancy/tenant-context';
@@ -117,11 +118,17 @@ export class FiscalDeskService implements OnModuleInit {
     }));
   }
 
-  async saveCertificate(tenantId: string, actorUserId: string, input: { branchId: string; name: string; pfxBase64: string; password: string; issuedAt?: string; expiresAt: string }) {
+  async saveCertificate(tenantId: string, actorUserId: string, input: { branchId: string; name?: string; pfxBase64: string; password: string; issuedAt?: string; expiresAt?: string }) {
     const opened = this.openCertificate(input.pfxBase64, input.password);
     if (!opened.ok) throw new DomainValidationError(opened.message);
     const branch = await this.settings(tenantId, input.branchId);
     const id = randomUUID();
+    const resolvedName = (input.name ?? '').trim() || opened.subjectName || branch.legalName || 'Certificado A1';
+    const resolvedIssuedAt = (input.issuedAt ?? '').trim() || opened.issuedAt || null;
+    const resolvedExpiresAt = (input.expiresAt ?? '').trim() || opened.expiresAt;
+    if (!resolvedExpiresAt) {
+      throw new DomainValidationError('Informe a data de expiração do certificado.');
+    }
     await this.dataSource.query(
       `UPDATE fiscal_certificates SET status = 'replaced', updated_by = $3, updated_at = now()
         WHERE tenant_id = $1 AND branch_id = $2 AND status = 'active'`,
@@ -131,10 +138,17 @@ export class FiscalDeskService implements OnModuleInit {
       `INSERT INTO fiscal_certificates (
          id, tenant_id, company_id, branch_id, name, pfx_cipher, password_cipher, issued_at, expires_at, status, created_by, updated_by
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10,$10)`,
-      [id, tenantId, branch.companyId, input.branchId, input.name.trim(), sealFiscalSecret(input.pfxBase64), sealFiscalSecret(input.password), input.issuedAt || null, input.expiresAt, actorUserId],
+      [id, tenantId, branch.companyId, input.branchId, resolvedName, sealFiscalSecret(input.pfxBase64), sealFiscalSecret(input.password), resolvedIssuedAt, resolvedExpiresAt, actorUserId],
     );
-    await this.audit(tenantId, input.branchId, actorUserId, 'fiscal_certificate', id, 'fiscal.certificate.saved', { name: input.name });
-    return { id, valid: true };
+    await this.audit(tenantId, input.branchId, actorUserId, 'fiscal_certificate', id, 'fiscal.certificate.saved', { name: resolvedName });
+    return {
+      id,
+      valid: true,
+      name: resolvedName,
+      issuedAt: resolvedIssuedAt,
+      expiresAt: resolvedExpiresAt,
+      message: opened.message,
+    };
   }
 
   async validateCertificate(tenantId: string, id: string) {
@@ -630,12 +644,118 @@ export class FiscalDeskService implements OnModuleInit {
     }));
   }
 
-  private openCertificate(pfxBase64: string, password: string): { ok: boolean; message: string } {
+  private openCertificate(
+    pfxBase64: string,
+    password: string,
+  ): { ok: boolean; message: string; subjectName?: string; issuedAt?: string; expiresAt?: string } {
+    const cleanBase64 = (pfxBase64 ?? '').trim();
+    if (!cleanBase64) {
+      return { ok: false, message: 'Selecione o arquivo .pfx ou .p12 do certificado.' };
+    }
+    const pfxBuffer = Buffer.from(cleanBase64, 'base64');
+    if (pfxBuffer.length < 64) {
+      return { ok: false, message: 'O arquivo do certificado está vazio ou corrompido.' };
+    }
+
     try {
-      createSecureContext({ pfx: Buffer.from(pfxBase64, 'base64'), passphrase: password });
-      return { ok: true, message: 'Certificado aceito. O emissor nacional ainda não está ligado; o teste confirma o arquivo e a senha.' };
+      createSecureContext({ pfx: pfxBuffer, passphrase: password });
+      const meta = this.extractCertificateMetaViaOpenSsl(pfxBuffer, password);
+      return {
+        ok: true,
+        message: 'Certificado aceito. O emissor nacional ainda não está ligado; o teste confirma o arquivo e a senha.',
+        ...meta,
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message.toLowerCase() : '';
+      if (reason.includes('mac verify failure') || reason.includes('invalid password') || reason.includes('bad decrypt')) {
+        return { ok: false, message: 'A senha do certificado digital está incorreta.' };
+      }
+
+      // Certificados A1 ICP-Brasil usam algoritmos PKCS#12 RC2-40-CBC / 3DES (módulo legacy do OpenSSL 3).
+      const legacy = this.openLegacyPkcs12ViaOpenSsl(pfxBuffer, password);
+      if (legacy.ok) {
+        return legacy;
+      }
+      return { ok: false, message: legacy.message };
+    }
+  }
+
+  private openLegacyPkcs12ViaOpenSsl(
+    pfxBuffer: Buffer,
+    password: string,
+  ): { ok: boolean; message: string; subjectName?: string; issuedAt?: string; expiresAt?: string } {
+    try {
+      const pemOutput = execFileSync(
+        'openssl',
+        ['pkcs12', '-legacy', '-nodes', '-passin', 'env:ANEXSYS_PFX_PASS'],
+        {
+          input: pfxBuffer,
+          env: { ...process.env, ANEXSYS_PFX_PASS: password },
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 8000,
+        },
+      ).toString('utf8');
+
+      const certMatch = pemOutput.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/);
+      const keyMatch = pemOutput.match(/-----BEGIN (?:PRIVATE|RSA PRIVATE|EC PRIVATE) KEY-----[\s\S]+?-----END (?:PRIVATE|RSA PRIVATE|EC PRIVATE) KEY-----/);
+      if (!certMatch || !keyMatch) {
+        return { ok: false, message: 'O arquivo PFX não contém chave privada e certificado A1 válidos.' };
+      }
+
+      createSecureContext({ cert: certMatch[0], key: keyMatch[0] });
+      const meta = this.parseX509Meta(certMatch[0]);
+      return {
+        ok: true,
+        message: 'Certificado A1 ICP-Brasil aceito e validado com sucesso.',
+        ...meta,
+      };
+    } catch (error) {
+      const stderr =
+        error && typeof error === 'object' && 'stderr' in error && Buffer.isBuffer((error as { stderr?: unknown }).stderr)
+          ? ((error as { stderr: Buffer }).stderr.toString('utf8') || '').toLowerCase()
+          : error instanceof Error
+            ? error.message.toLowerCase()
+            : '';
+      if (stderr.includes('mac verify failure') || stderr.includes('invalid password') || stderr.includes('bad decrypt')) {
+        return { ok: false, message: 'A senha do certificado digital está incorreta.' };
+      }
+      return { ok: false, message: 'Certificado inválido ou arquivo PFX corrompido.' };
+    }
+  }
+
+  private extractCertificateMetaViaOpenSsl(pfxBuffer: Buffer, password: string) {
+    try {
+      const pemOutput = execFileSync(
+        'openssl',
+        ['pkcs12', '-legacy', '-nokeys', '-clcerts', '-passin', 'env:ANEXSYS_PFX_PASS'],
+        {
+          input: pfxBuffer,
+          env: { ...process.env, ANEXSYS_PFX_PASS: password },
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 5000,
+        },
+      ).toString('utf8');
+      const certMatch = pemOutput.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/);
+      return certMatch ? this.parseX509Meta(certMatch[0]) : {};
     } catch {
-      return { ok: false, message: 'Certificado inválido.' };
+      return {};
+    }
+  }
+
+  private parseX509Meta(certPem: string): { subjectName?: string; issuedAt?: string; expiresAt?: string } {
+    try {
+      const x509 = new X509Certificate(certPem);
+      const cnMatch = x509.subject.match(/(?:^|\n)CN=([^\n]+)/);
+      const subjectName = cnMatch?.[1]?.trim();
+      const validFrom = new Date(x509.validFrom);
+      const validTo = new Date(x509.validTo);
+      return {
+        ...(subjectName ? { subjectName } : {}),
+        ...(!Number.isNaN(validFrom.getTime()) ? { issuedAt: validFrom.toISOString().slice(0, 10) } : {}),
+        ...(!Number.isNaN(validTo.getTime()) ? { expiresAt: validTo.toISOString().slice(0, 10) } : {}),
+      };
+    } catch {
+      return {};
     }
   }
 

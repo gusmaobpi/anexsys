@@ -182,10 +182,21 @@ function CertificatesScreen({ apiJson, branchId, branches, onBranch, onError, on
   useEffect(() => { void load().catch((reason) => onError(describeWorkspaceError(reason, "Os certificados não abriram."))); }, [load, onError]);
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (!pfx) {
+      onError("Selecione o arquivo .pfx ou .p12 do certificado.");
+      return;
+    }
     try {
-      await apiJson("/fiscal/certificates", { method: "POST", body: JSON.stringify({ branchId, name, password, pfxBase64: pfx, issuedAt, expiresAt }) });
+      const saved = await apiJson<{ name?: string; issuedAt?: string | null; expiresAt?: string }>(
+        "/fiscal/certificates",
+        { method: "POST", body: JSON.stringify({ branchId, name, password, pfxBase64: pfx, issuedAt, expiresAt }) },
+      );
       setPassword("");
-      onMessage("Certificado gravado. A senha não fica visível.");
+      if (saved?.name) setName(saved.name);
+      if (saved?.issuedAt) setIssuedAt(saved.issuedAt.slice(0, 10));
+      if (saved?.expiresAt) setExpiresAt(saved.expiresAt.slice(0, 10));
+      onError(null);
+      onMessage("Certificado A1 gravado e validado com sucesso. A senha não fica visível.");
       await load();
     } catch (reason) {
       onError(describeWorkspaceError(reason, "O certificado não foi gravado."));
@@ -196,17 +207,20 @@ function CertificatesScreen({ apiJson, branchId, branches, onBranch, onError, on
       <h2 className="cadastro-list__title">Certificados Digitais</h2>
       <form className="form-grid" onSubmit={save}>
         <BranchField branches={branches} branchId={branchId} onBranch={onBranch} />
-        <label className="field"><span>Nome</span><input value={name} onChange={(event) => setName(event.target.value)} required /></label>
+        <label className="field"><span>Nome (opcional — lido do certificado)</span><input placeholder="Ex.: Atelier de Costura Iza Gusmão" value={name} onChange={(event) => setName(event.target.value)} /></label>
         <label className="field"><span>Arquivo PFX</span><input type="file" accept=".pfx,.p12" onChange={(event) => {
           const file = event.target.files?.[0];
           if (!file) return;
+          if (!name.trim()) {
+            setName(file.name.replace(/\.(pfx|p12)$/i, ""));
+          }
           const reader = new FileReader();
           reader.onload = () => setPfx(String(reader.result).split(",").pop() ?? "");
           reader.readAsDataURL(file);
-        }} /></label>
+        }} required /></label>
         <label className="field"><span>Senha</span><input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
-        <label className="field"><span>Data Emissão</span><input type="date" value={issuedAt} onChange={(event) => setIssuedAt(event.target.value)} /></label>
-        <label className="field"><span>Data Expiração</span><input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required /></label>
+        <label className="field"><span>Data Emissão (opcional — lida do PFX)</span><input type="date" value={issuedAt} onChange={(event) => setIssuedAt(event.target.value)} /></label>
+        <label className="field"><span>Data Expiração (opcional — lida do PFX)</span><input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /></label>
         <div className="button-row"><button className="button" type="submit">Trocar Certificado</button></div>
       </form>
       <div className="data-table-wrapper">

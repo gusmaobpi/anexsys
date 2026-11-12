@@ -29,11 +29,11 @@ class SettingsBody extends BranchBody {
 }
 
 class CertificateBody extends BranchBody {
-  @IsString() name!: string;
+  @IsOptional() @IsString() name?: string;
   @IsString() pfxBase64!: string;
   @IsString() password!: string;
   @IsOptional() @IsString() issuedAt?: string;
-  @IsString() expiresAt!: string;
+  @IsOptional() @IsString() expiresAt?: string;
 }
 
 class EnvironmentBody extends BranchBody {
