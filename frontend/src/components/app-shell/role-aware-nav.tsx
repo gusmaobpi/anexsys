@@ -9,10 +9,13 @@ import {
   shouldShowWorkspaceNavSubmenu,
 } from "@/components/app-shell/workspace-manager-store";
 import {
+  createEmptySidebarFavorites,
   createEmptySidebarTree,
+  readSidebarFavorites,
   readSidebarTree,
   subscribeSidebarTree,
   toggleTreeId,
+  writeSidebarFavorites,
   writeSidebarTree,
 } from "@/components/app-shell/sidebar-tree";
 import { INTEGRATION_ORDER_HREF } from "@/components/integration/migration-layouts";
@@ -256,10 +259,16 @@ function TreeChevron({ expanded }: Readonly<{ expanded: boolean }>) {
 }
 
 export function RoleAwareNav({ onNavigate }: Readonly<{ onNavigate?: () => void }>) {
-  const { hasAnyPermission } = useSession();
+  const { session, hasAnyPermission } = useSession();
   const { currentTab, tabs, activateWorkspace, closeWorkspace, isHome, openWorkspaceFromMenu } = useWorkspaceManager();
   const { isMobile } = useWorkspaceViewportMode();
+  const userId = session?.user?.id ?? null;
   const tree = useSyncExternalStore(subscribeSidebarTree, readSidebarTree, createEmptySidebarTree);
+  const favorites = useSyncExternalStore(
+    subscribeSidebarTree,
+    () => readSidebarFavorites(userId),
+    createEmptySidebarFavorites,
+  );
   const hasAllPermissions = (permissions: string[]) => permissions.every((permission) => hasAnyPermission(permission));
 
   const visibleSections = navSections
@@ -275,6 +284,26 @@ export function RoleAwareNav({ onNavigate }: Readonly<{ onNavigate?: () => void 
     }))
     .filter((section) => section.items.length > 0);
 
+  const visibleByHref = new Map<string, NavItem>();
+  for (const section of visibleSections) {
+    for (const item of section.items) {
+      visibleByHref.set(item.href, item);
+    }
+  }
+
+  const favoriteItems = favorites
+    .map((href) => visibleByHref.get(href))
+    .filter((item): item is NavItem => Boolean(item));
+
+  const sectionsWithFavorites: Array<NavSection & { isFavorites?: boolean }> =
+    favoriteItems.length > 0
+      ? [{ title: "Favoritos", items: favoriteItems, isFavorites: true }, ...visibleSections]
+      : visibleSections;
+
+  const toggleFavorite = (href: string) => {
+    writeSidebarFavorites(userId, toggleTreeId(favorites, href));
+  };
+
   const toggleSection = (title: string, lockedOpen: boolean) => {
     if (lockedOpen && !tree.collapsedSections.includes(title)) {
       return;
@@ -287,13 +316,16 @@ export function RoleAwareNav({ onNavigate }: Readonly<{ onNavigate?: () => void 
 
   return (
     <nav className="nav-tree">
-      {visibleSections.map((section) => {
+      {sectionsWithFavorites.map((section) => {
         const hasOpenSubmenu = section.items.some(
           (item) => !isMobile && shouldShowWorkspaceNavSubmenu(tabs, item.href),
         );
         const sectionExpanded = hasOpenSubmenu || !tree.collapsedSections.includes(section.title);
         return (
-          <div className="nav-tree__section" key={section.title}>
+          <div
+            className={`nav-tree__section${section.isFavorites ? " nav-tree__section--favorites" : ""}`}
+            key={section.title}
+          >
             <button
               aria-expanded={sectionExpanded}
               className="sidebar__section-title"
@@ -301,20 +333,21 @@ export function RoleAwareNav({ onNavigate }: Readonly<{ onNavigate?: () => void 
               type="button"
             >
               <TreeChevron expanded={sectionExpanded} />
-              <span>{section.title}</span>
+              <span>{section.isFavorites ? `★ ${section.title}` : section.title}</span>
             </button>
             {sectionExpanded ? (
               <ul className="nav-list">
                 {section.items.map((item) => {
                   const relatedTabs = listWorkspaceTabsForNavItem(tabs, item.href);
                   const hasSubmenu = !isMobile && shouldShowWorkspaceNavSubmenu(tabs, item.href);
-                      const active = item.href === "/dashboard"
-                        ? isHome
-                        : currentTab
-                          ? getWorkspaceBasePath(currentTab.pathname) === item.href
-                          : false;
+                  const isFavorite = favorites.includes(item.href);
+                  const active = item.href === "/dashboard"
+                    ? isHome
+                    : currentTab
+                      ? getWorkspaceBasePath(currentTab.pathname) === item.href
+                      : false;
                   return (
-                    <li key={item.href}>
+                    <li key={`${section.title}-${item.href}`}>
                       <div className={`nav-link${active ? " nav-link--active" : ""}`}>
                         {hasSubmenu ? (
                           <span className="nav-tree-toggle">
@@ -332,7 +365,25 @@ export function RoleAwareNav({ onNavigate }: Readonly<{ onNavigate?: () => void 
                           type="button"
                         >
                           <span>{item.label}</span>
-                          <span className="nav-hint">{item.hint}</span>
+                          {section.isFavorites ? null : <span className="nav-hint">{item.hint}</span>}
+                        </button>
+                        <button
+                          aria-label={
+                            isFavorite
+                              ? `Remover ${item.label} dos favoritos`
+                              : `Favoritar ${item.label}`
+                          }
+                          aria-pressed={isFavorite}
+                          className={`nav-link__star${isFavorite ? " nav-link__star--active" : ""}`}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            toggleFavorite(item.href);
+                          }}
+                          title={isFavorite ? "Remover dos favoritos" : "Fixar nos favoritos"}
+                          type="button"
+                        >
+                          {isFavorite ? "★" : "☆"}
                         </button>
                       </div>
                       {hasSubmenu ? (

@@ -1136,14 +1136,57 @@ textarea {
   min-height: 0;
   overflow: hidden;
   border-right: 1px solid var(--border);
-  transition: padding 0.2s ease, opacity 0.15s ease;
+  transition: padding 0.2s ease, opacity 0.15s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .app-shell--sidebar-collapsed .sidebar {
-  padding: 0;
-  border-right: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  z-index: 60;
+  padding: 20px 16px;
+  border-right: 1px solid var(--border);
+  transform: translateX(-100%);
   opacity: 0;
   pointer-events: none;
+  box-shadow: none;
+}
+
+.app-shell--sidebar-collapsed.app-shell--sidebar-peek .sidebar {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.18);
+}
+
+.sidebar-hover-edge {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 10px;
+  z-index: 55;
+  background: transparent;
+}
+
+.sidebar-hover-edge::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 3px;
+  height: 52px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.45);
+  transition: background-color 0.15s ease, height 0.15s ease;
+}
+
+.sidebar-hover-edge:hover::after {
+  height: 76px;
+  background: var(--primary);
 }
 
 .sidebar__pinned {
@@ -1339,6 +1382,49 @@ textarea {
 .nav-hint {
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.nav-tree__section--favorites {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-tree__section--favorites .sidebar__section-title {
+  color: var(--primary);
+}
+
+.nav-link__star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.nav-link:hover .nav-link__star,
+.nav-link:focus-within .nav-link__star,
+.nav-link__star--active {
+  opacity: 1;
+}
+
+.nav-link__star:hover {
+  background: var(--surface-alt);
+  color: #f59e0b;
+}
+
+.nav-link__star--active {
+  color: #f59e0b;
 }
 
 .nav-sublist {

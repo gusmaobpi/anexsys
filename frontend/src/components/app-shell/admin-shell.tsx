@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { ActiveContextCombos } from "@/components/app-shell/active-context-combos";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
 import { RoleAwareNav } from "@/components/app-shell/role-aware-nav";
+import {
+  readSidebarCollapsed,
+  subscribeSidebarTree,
+  writeSidebarCollapsed,
+} from "@/components/app-shell/sidebar-tree";
 import { TopbarChipTray, WorkspaceTabsBar } from "@/components/app-shell/workspace-manager";
 import { WorkspaceKeepAlive } from "@/components/app-shell/workspace-screens";
 import { empresaLabel } from "@/components/providers/session-context";
@@ -24,14 +29,29 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   const { session, logout, errorMessage, clearError } = useSession();
   const pathname = usePathname();
   const { isDesktop, isMobile } = useWorkspaceViewportMode();
+  const userId = session?.user?.id ?? null;
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+  const desktopCollapsed = useSyncExternalStore(
+    subscribeSidebarTree,
+    () => readSidebarCollapsed(userId),
+    () => false,
+  );
+  const [hoverPeekOpen, setHoverPeekOpen] = useState(false);
+  const openTimerRef = useRef<number | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (openTimerRef.current !== null) window.clearTimeout(openTimerRef.current);
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    };
+  }, []);
 
   if (pathname.startsWith("/floor/")) {
     return <main className="floor-phone">{children}</main>;
   }
 
-  const sidebarVisible = isDesktop ? !desktopCollapsed : sidebarOpen;
+  const sidebarVisible = isDesktop ? !desktopCollapsed || hoverPeekOpen : sidebarOpen;
   const activeEmpresa =
     session?.empresas.find((item) => item.id === session.activeEmpresaId) ??
     session?.empresas[0] ??
@@ -52,17 +72,76 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
       ? `data:${session.user.portraitMimeType};base64,${session.user.portraitBase64}`
       : null;
 
+  function clearPeekTimers() {
+    if (openTimerRef.current !== null) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }
+
+  function handleEdgeEnter() {
+    if (!isDesktop || !desktopCollapsed) return;
+    clearPeekTimers();
+    openTimerRef.current = window.setTimeout(() => {
+      openTimerRef.current = null;
+      setHoverPeekOpen(true);
+    }, 110);
+  }
+
+  function handleSidebarMouseEnter() {
+    if (!isDesktop || !desktopCollapsed) return;
+    clearPeekTimers();
+    setHoverPeekOpen(true);
+  }
+
+  function handleSidebarMouseLeave() {
+    if (!isDesktop || !desktopCollapsed) return;
+    clearPeekTimers();
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      setHoverPeekOpen(false);
+    }, 180);
+  }
+
   function handleToggleSidebar() {
     if (isDesktop) {
-      setDesktopCollapsed((current) => !current);
+      clearPeekTimers();
+      setHoverPeekOpen(false);
+      writeSidebarCollapsed(userId, !desktopCollapsed);
     } else {
       setSidebarOpen((current) => !current);
     }
   }
 
   return (
-    <div className={`app-shell${isDesktop && desktopCollapsed ? " app-shell--sidebar-collapsed" : ""}`}>
-      <aside className={`sidebar${sidebarVisible ? " sidebar--open" : ""}`}>
+    <div
+      className={`app-shell${isDesktop && desktopCollapsed ? " app-shell--sidebar-collapsed" : ""}${
+        isDesktop && desktopCollapsed && hoverPeekOpen ? " app-shell--sidebar-peek" : ""
+      }`}
+    >
+      {isDesktop && desktopCollapsed ? (
+        <div
+          aria-hidden="true"
+          className="sidebar-hover-edge"
+          onMouseEnter={handleEdgeEnter}
+          onMouseLeave={() => {
+            if (openTimerRef.current !== null) {
+              window.clearTimeout(openTimerRef.current);
+              openTimerRef.current = null;
+            }
+          }}
+        />
+      ) : null}
+
+      <aside
+        className={`sidebar${sidebarVisible ? " sidebar--open" : ""}`}
+        onMouseEnter={handleSidebarMouseEnter}
+        onMouseLeave={handleSidebarMouseLeave}
+      >
         <div className="sidebar__pinned">
           <div className="sidebar__brand">
             <div className="topbar__brand-badge">
@@ -84,7 +163,12 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
         </div>
 
         <div className="sidebar__nav">
-          <RoleAwareNav onNavigate={() => setSidebarOpen(false)} />
+          <RoleAwareNav
+            onNavigate={() => {
+              setSidebarOpen(false);
+              setHoverPeekOpen(false);
+            }}
+          />
         </div>
       </aside>
 
