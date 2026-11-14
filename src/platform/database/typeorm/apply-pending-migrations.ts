@@ -40,6 +40,7 @@ import { FiscalModule1760000061000 } from './migrations/1760000061000-fiscal-mod
 import { BrandImages1760000062000 } from './migrations/1760000062000-brand-images';
 import { PrivacyCycle1760000063000 } from './migrations/1760000063000-privacy-cycle';
 import { MessagingChannels1760000064000 } from './migrations/1760000064000-messaging-channels';
+import { OnboardingRegistrations1760000065000 } from './migrations/1760000065000-onboarding-registrations';
 
 export async function applyPendingMigrations(dataSource: DataSource): Promise<void> {
   if (typeof dataSource.runMigrations === 'function') {
@@ -69,6 +70,7 @@ export async function ensureAtelierOsSchema(dataSource: DataSource): Promise<voi
       await new BrandImages1760000062000().up(queryRunner);
       await new PrivacyCycle1760000063000().up(queryRunner);
       await new MessagingChannels1760000064000().up(queryRunner);
+      await new OnboardingRegistrations1760000065000().up(queryRunner);
       await new DashboardParameters1760000057000().up(queryRunner);
       await new IntegrationRuns1760000059000().up(queryRunner);
       await new PaymentMachineWait1760000049000().up(queryRunner);

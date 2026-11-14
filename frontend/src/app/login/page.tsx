@@ -128,10 +128,15 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="button-row">
-              <button className="button" disabled={submitting} type="submit">
-                {submitting ? "Entrando…" : "Entrar"}
-              </button>
+            <div className="button-row" style={{ alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <button className="button" disabled={submitting} type="submit">
+                  {submitting ? "Entrando…" : "Entrar"}
+                </button>
+                <Link className="button-secondary" href="/credenciamento">
+                  Credenciamento
+                </Link>
+              </div>
               <Link href="/forgot-password">Esqueci a senha</Link>
             </div>
           </form>

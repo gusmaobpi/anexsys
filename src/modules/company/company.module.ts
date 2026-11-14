@@ -9,9 +9,11 @@ import { BranchHoursSeedService } from './application/company/branch-hours-seed.
 import { BranchHoursService } from './application/company/branch-hours.service';
 import { CompanyService } from './application/company/company.service';
 import { IsolationReportService } from './application/company/isolation-report.service';
+import { PublicOnboardingService } from './application/company/public-onboarding.service';
 import { TenantProvisioningService } from './application/company/tenant-provisioning.service';
 import { CompaniesController } from './http/companies.controller';
 import { IsolationReportController } from './http/isolation-report.controller';
+import { PublicOnboardingController } from './http/public-onboarding.controller';
 import { TenantModulesController } from './http/tenant-modules.controller';
 import { BranchOperatingHoursEntity } from './infrastructure/persistence/entities/branch-operating-hours.entity';
 import { CompanyEntity } from './infrastructure/persistence/entities/company.entity';
@@ -29,12 +31,13 @@ import { TenantModuleRepository } from './infrastructure/persistence/repositorie
     forwardRef(() => BranchModule),
     forwardRef(() => AuthorizationModule),
   ],
-  controllers: [CompaniesController, IsolationReportController, TenantModulesController],
+  controllers: [CompaniesController, IsolationReportController, TenantModulesController, PublicOnboardingController],
   providers: [
     CompanyService,
     BranchHoursSeedService,
     BranchHoursService,
     TenantProvisioningService,
+    PublicOnboardingService,
     IsolationReportService,
     CompanyRepository,
     BranchOperatingHoursRepository,

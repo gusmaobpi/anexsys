@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ActiveContextCombos } from "@/components/app-shell/active-context-combos";
 import { useWorkspaceViewportMode } from "@/components/app-shell/workspace-responsive";
@@ -215,6 +216,14 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
           <TopbarChipTray />
 
           <div className="topbar__actions">
+            <Link
+              className="topbar-chip"
+              href="/credenciamento"
+              title="Abrir página pública de Credenciamento de novas Contas SaaS"
+            >
+              Credenciamento
+            </Link>
+
             <div className="topbar__user-profile" title={session?.user?.email ?? userDisplayName}>
               <div className="topbar__user-avatar" aria-hidden="true">
                 {userPortraitUrl ? (
