@@ -367,7 +367,43 @@ export default function PublicOsPage() {
                 </div>
               </div>
 
-              {/* APROVAÇÃO DIGITAL ("CONCORDO") */}
+              {/* FICHA DAS PEÇAS E SERVIÇOS (PRIMEIRO A CLIENTE LÊ O QUE FOI COMBINADO) */}
+              <div style={{ display: "grid", gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-tertiary)" }}>
+                  {`Peças e Serviços (${view.items.length})`}
+                </span>
+                <ul className="public-os__items" style={{ margin: 0 }}>
+                  {view.items.map((item) => {
+                    const price = money(item.subtotal ?? item.unitPrice);
+                    return (
+                      <li
+                        key={`${item.itemNo}-${item.description}`}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          gap: 12,
+                          background: "#ffffff",
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: 2 }}>
+                          <strong style={{ color: "var(--text-primary)", fontSize: 14 }}>
+                            {item.itemType} · {item.description}
+                          </strong>
+                          {item.complement ? <span style={{ fontSize: 13 }}>{item.complement}</span> : null}
+                        </div>
+                        {price ? (
+                          <span className="public-os__price" style={{ whiteSpace: "nowrap" }}>
+                            {`R$ ${price}`}
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+
+              {/* APROVAÇÃO DIGITAL ("CONCORDO" — LOGO ABAIXO DAS PEÇAS E SERVIÇOS) */}
               {agreement === "concordo" ? (
                 <div
                   style={{
@@ -449,42 +485,6 @@ export default function PublicOsPage() {
                   Quando estiver no balcão, a atendente libera o botão Recebi neste link.
                 </p>
               ) : null}
-
-              {/* FICHA DAS PEÇAS E SERVIÇOS */}
-              <div style={{ display: "grid", gap: 8 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-tertiary)" }}>
-                  {`Peças e Serviços (${view.items.length})`}
-                </span>
-                <ul className="public-os__items" style={{ margin: 0 }}>
-                  {view.items.map((item) => {
-                    const price = money(item.subtotal ?? item.unitPrice);
-                    return (
-                      <li
-                        key={`${item.itemNo}-${item.description}`}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
-                          gap: 12,
-                          background: "#ffffff",
-                        }}
-                      >
-                        <div style={{ display: "grid", gap: 2 }}>
-                          <strong style={{ color: "var(--text-primary)", fontSize: 14 }}>
-                            {item.itemType} · {item.description}
-                          </strong>
-                          {item.complement ? <span style={{ fontSize: 13 }}>{item.complement}</span> : null}
-                        </div>
-                        {price ? (
-                          <span className="public-os__price" style={{ whiteSpace: "nowrap" }}>
-                            {`R$ ${price}`}
-                          </span>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
 
               {/* =============================================================
                * CHECKOUT LIMPO LADO A LADO: [ ❖ Pix ] | [ 💳 Cartão ]
