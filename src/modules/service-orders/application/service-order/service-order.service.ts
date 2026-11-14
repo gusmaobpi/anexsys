@@ -409,6 +409,7 @@ export class ServiceOrderService {
       documentType: 'service_order' as const,
       serviceOrderId: details.serviceOrder.id,
       orderNo: details.serviceOrder.orderNo,
+      publicToken: details.serviceOrder.publicToken ?? null,
       status: details.serviceOrder.status,
       returnKind: details.serviceOrder.returnKind,
       openedAt: details.serviceOrder.openedAt,

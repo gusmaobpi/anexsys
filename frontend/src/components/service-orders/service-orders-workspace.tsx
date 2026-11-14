@@ -898,12 +898,17 @@ export function ServiceOrdersWorkspace() {
     async (serviceOrderId: string) => {
       try {
         const view = await apiJson<OsPrintView>(`/service-orders/${serviceOrderId}/print-view`);
+        const fallbackToken = orders.find((item) => item.id === serviceOrderId)?.publicToken ?? selectedOrder?.publicToken ?? null;
+        const token = view.publicToken ?? fallbackToken;
+        const publicUrl = token && typeof window !== "undefined" ? `${window.location.origin}/os/${token}` : null;
         openWhatsAppResend(
           view.customer.phone,
           buildOsWhatsAppMessage({
             customerName: view.customer.legalName,
             companyName,
             orderNo: view.orderNo,
+            publicUrl,
+            status: view.status,
           }),
         );
         setMessage(`WhatsApp da OS ${view.orderNo} aberto para reenvio.`);
@@ -911,13 +916,16 @@ export function ServiceOrdersWorkspace() {
         setMessage(formatWorkspaceMessage(error, "O WhatsApp não pôde ser aberto para reenvio."));
       }
     },
-    [apiJson, companyName],
+    [apiJson, companyName, orders, selectedOrder?.publicToken],
   );
 
   const resendEmail = useCallback(
     async (serviceOrderId: string) => {
       try {
         const view = await apiJson<OsPrintView>(`/service-orders/${serviceOrderId}/print-view`);
+        const fallbackToken = orders.find((item) => item.id === serviceOrderId)?.publicToken ?? selectedOrder?.publicToken ?? null;
+        const token = view.publicToken ?? fallbackToken;
+        const publicUrl = token && typeof window !== "undefined" ? `${window.location.origin}/os/${token}` : null;
         openEmailResend(
           view.customer.email,
           `Ordem de serviço ${view.orderNo}`,
@@ -925,6 +933,8 @@ export function ServiceOrdersWorkspace() {
             customerName: view.customer.legalName,
             companyName,
             orderNo: view.orderNo,
+            publicUrl,
+            status: view.status,
           }),
         );
         setMessage(`E-mail da OS ${view.orderNo} aberto para reenvio.`);
@@ -932,7 +942,7 @@ export function ServiceOrdersWorkspace() {
         setMessage(formatWorkspaceMessage(error, "O e-mail não pôde ser aberto para reenvio."));
       }
     },
-    [apiJson, companyName],
+    [apiJson, companyName, orders, selectedOrder?.publicToken],
   );
 
   const openPickupPanel = useCallback(

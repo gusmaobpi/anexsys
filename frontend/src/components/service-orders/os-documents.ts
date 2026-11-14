@@ -6,6 +6,7 @@ export type OsPrintView = {
   documentType: "service_order";
   serviceOrderId: string;
   orderNo: string;
+  publicToken?: string | null;
   status: string;
   statusLabel?: string;
   openedAt: string;
@@ -539,8 +540,14 @@ export function buildOsWhatsAppMessage(input: {
   customerName: string;
   companyName: string;
   orderNo: string;
+  publicUrl?: string | null;
+  status?: string | null;
 }) {
-  return `Olá, ${firstName(input.customerName)}, aqui é do ${input.companyName}, você está recebendo a sua ordem de serviço digital ${input.orderNo}, acompanhe o status de produção, mas fique tranquila que por este canal avisaremos quando estiver pronto, entre agora para aprovar o que ficou combinado.`;
+  const linkSuffix = input.publicUrl?.trim() ? ` ${input.publicUrl.trim()}` : "";
+  if (input.status === "ready_for_pickup") {
+    return `Olá, ${firstName(input.customerName)}, aqui é do ${input.companyName}. A sua ordem de serviço digital ${input.orderNo} já está pronta para retirada! Acesse o link para ver os detalhes, adiantar o pagamento se desejar e confirmar a retirada no balcão.${linkSuffix}`;
+  }
+  return `Olá, ${firstName(input.customerName)}, aqui é do ${input.companyName}, você está recebendo a sua ordem de serviço digital ${input.orderNo}, acompanhe o status de produção, mas fique tranquila que por este canal avisaremos quando estiver pronto, entre agora para aprovar o que ficou combinado.${linkSuffix}`;
 }
 
 export function openWhatsAppResend(phone: string | null | undefined, message: string) {

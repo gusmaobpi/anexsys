@@ -21,6 +21,14 @@ test('builds the WhatsApp resend text without prices', () => {
   assert.equal(toWhatsAppPhone('(11) 98888-7777'), '5511988887777');
   assert.match(message, /OS-14555/);
   assert.doesNotMatch(message, /R\$|valor|preço/i);
+
+  const withLink = buildOsWhatsAppMessage({
+    customerName: 'Andre Gusmao',
+    companyName: 'ANEXSYS HOMOLOG',
+    orderNo: 'AAA000015',
+    publicUrl: 'https://hml.atelierizagusmao.com.br/os/token-123',
+  });
+  assert.match(withLink, /https:\/\/hml\.atelierizagusmao\.com\.br\/os\/token-123$/);
 });
 
 test('builds the A5 OP with the shelf face and without prices or quantity', () => {
