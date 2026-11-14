@@ -39,11 +39,10 @@ export class CieloOrderManagerAdapter implements PaymentProviderAdapter, OnModul
     const amountInCents = Math.round(request.amount * 100);
     const description = request.description ?? request.referenceNo;
     const paymentCode = cieloPaymentCode(request.informedModality);
-    const terminalNumber = this.resolveLogicalTerminalNumber(request.terminalCode);
-
     // Fluxo oficial: cria a ordem como DRAFT e depois a libera para pagamento (PLACE).
     // payment_code faz a Cielo Smart abrir já na forma escolhida. Na LIO antiga esse campo é ignorado.
-    // terminal_number direciona o pedido para a Cielo Smart específica (L300 V4 / L400).
+    // Não enviamos terminal_number por padrão para que o pedido sincronize imediatamente em todos os terminais do EC (L400 / L300),
+    // evitando que o Order Service oculte o pedido por versão ou dígito verificador.
     const created = await this.callCielo(config, 'POST', '/orders', {
       number: request.referenceNo,
       reference: description,
@@ -52,7 +51,6 @@ export class CieloOrderManagerAdapter implements PaymentProviderAdapter, OnModul
       price: amountInCents,
       ...(paymentCode ? { payment_code: paymentCode } : {}),
       ...(paymentCode && paymentCode !== 'PIX' ? { installments: 0 } : {}),
-      ...(terminalNumber ? { terminal_number: terminalNumber } : {}),
       items: [
         {
           sku: request.referenceNo,
@@ -265,14 +263,6 @@ export class CieloOrderManagerAdapter implements PaymentProviderAdapter, OnModul
 
   private normalizeOrderStatus(order: Record<string, unknown>): string {
     return String(order?.status ?? order?.orderStatus ?? '').toUpperCase();
-  }
-
-  private resolveLogicalTerminalNumber(terminalCode: string | null | undefined): string | null {
-    const trimmed = terminalCode?.trim() ?? '';
-    if (!trimmed) {
-      return null;
-    }
-    return /^\d{7,9}(-\d)?$/.test(trimmed) ? trimmed : null;
   }
 
   private readTransactionFields(transaction: Record<string, unknown>) {

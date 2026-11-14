@@ -115,18 +115,6 @@ describe('CieloOrderManagerAdapter', () => {
     }
   });
 
-  it('sends terminal_number when terminalCode is a Cielo logical terminal number', async () => {
-    const adapter = new CieloOrderManagerAdapter(new PaymentProviderRegistry());
-    const calls = mockFetchSequence([
-      { payload: { id: 'order-1' } },
-      { payload: {} },
-      { payload: { id: 'order-1', status: 'PLACED' } },
-    ]);
-    await adapter.initiatePayment(buildRequest({ terminalCode: '02911380-0', informedModality: 'credit' }));
-    const body = JSON.parse(String(calls[0].init?.body));
-    assert.equal(body.terminal_number, '02911380-0');
-  });
-
   it('marks the charge as awaiting the terminal when the order is placed', async () => {
     mockFetchSequence([{ payload: { id: 'order-1' } }, { payload: {} }, { payload: { id: 'order-1', status: 'PLACED' } }]);
     const adapter = new CieloOrderManagerAdapter(new PaymentProviderRegistry());
