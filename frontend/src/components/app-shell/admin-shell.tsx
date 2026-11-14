@@ -52,7 +52,9 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
     return <main className="floor-phone">{children}</main>;
   }
 
-  const sidebarVisible = isDesktop ? !desktopCollapsed || hoverPeekOpen : sidebarOpen;
+  const isRailCapable = !isMobile;
+  const isCollapsedRail = isRailCapable && desktopCollapsed;
+  const sidebarVisible = isRailCapable ? !desktopCollapsed : sidebarOpen;
   const activeEmpresa =
     session?.empresas.find((item) => item.id === session.activeEmpresaId) ??
     session?.empresas[0] ??
@@ -109,7 +111,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
   }
 
   function handleToggleSidebar() {
-    if (isDesktop) {
+    if (!isMobile) {
       clearPeekTimers();
       setHoverPeekOpen(false);
       writeSidebarCollapsed(userId, !desktopCollapsed);
@@ -120,51 +122,50 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
 
   return (
     <div
-      className={`app-shell${isDesktop && desktopCollapsed ? " app-shell--sidebar-collapsed" : ""}${
-        isDesktop && desktopCollapsed && hoverPeekOpen ? " app-shell--sidebar-peek" : ""
-      }`}
+      className={`app-shell${isCollapsedRail ? " app-shell--sidebar-collapsed" : ""}`}
     >
-      {isDesktop && desktopCollapsed ? (
-        <div
-          aria-hidden="true"
-          className="sidebar-hover-edge"
-          onMouseEnter={handleEdgeEnter}
-          onMouseLeave={() => {
-            if (openTimerRef.current !== null) {
-              window.clearTimeout(openTimerRef.current);
-              openTimerRef.current = null;
-            }
-          }}
-        />
-      ) : null}
-
       <aside
-        className={`sidebar${sidebarVisible ? " sidebar--open" : ""}`}
-        onMouseEnter={handleSidebarMouseEnter}
-        onMouseLeave={handleSidebarMouseLeave}
+        className={`sidebar${sidebarVisible ? " sidebar--open" : ""}${isCollapsedRail ? " sidebar--rail" : ""}`}
       >
         <div className="sidebar__pinned">
           <div className="sidebar__brand">
-            <div className="topbar__brand-badge">
-              <div className="topbar__brand-logo" aria-hidden="true">
-                {companyLogoUrl ? (
-                  <img alt={companyDisplayName} src={companyLogoUrl} />
-                ) : (
-                  initialsFromLabel(companyDisplayName, "AX")
-                )}
+            <div className="topbar__brand-badge" style={{ justifyContent: isCollapsedRail ? "center" : "space-between", width: "100%" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <div className="topbar__brand-logo" aria-hidden="true" title={`${companyDisplayName} · ${branchDisplayName}`}>
+                  {companyLogoUrl ? (
+                    <img alt={companyDisplayName} src={companyLogoUrl} />
+                  ) : (
+                    initialsFromLabel(companyDisplayName, "AX")
+                  )}
+                </div>
+                {!isCollapsedRail ? (
+                  <div className="topbar__brand-copy">
+                    <strong>{companyDisplayName}</strong>
+                    <span>{branchDisplayName}</span>
+                  </div>
+                ) : null}
               </div>
-              <div className="topbar__brand-copy">
-                <strong>{companyDisplayName}</strong>
-                <span>{branchDisplayName}</span>
-              </div>
+
+              {!isMobile ? (
+                <button
+                  aria-label={isCollapsedRail ? "Expandir menu lateral" : "Encolher menu para a lateral"}
+                  className="sidebar__rail-toggle"
+                  onClick={handleToggleSidebar}
+                  title={isCollapsedRail ? "Expandir menu lateral" : "Encolher menu para tela cheia"}
+                  type="button"
+                >
+                  {isCollapsedRail ? "⇥" : "⇤"}
+                </button>
+              ) : null}
             </div>
           </div>
 
-          <ActiveContextCombos />
+          {!isCollapsedRail ? <ActiveContextCombos /> : null}
         </div>
 
         <div className="sidebar__nav">
           <RoleAwareNav
+            collapsed={isCollapsedRail}
             onNavigate={() => {
               setSidebarOpen(false);
               setHoverPeekOpen(false);
@@ -173,7 +174,7 @@ export function AdminShell({ children }: Readonly<{ children: ReactNode }>) {
         </div>
       </aside>
 
-      {!isDesktop && sidebarVisible ? (
+      {isMobile && sidebarVisible ? (
         <button
           aria-label="Fechar menu"
           className="sidebar-backdrop"

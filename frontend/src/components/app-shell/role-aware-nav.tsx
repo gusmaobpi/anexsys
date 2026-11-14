@@ -258,7 +258,25 @@ function TreeChevron({ expanded }: Readonly<{ expanded: boolean }>) {
   );
 }
 
-export function RoleAwareNav({ onNavigate }: Readonly<{ onNavigate?: () => void }>) {
+function navShortMonogram(label: string): string {
+  const words = label
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 2 || wordsCount(label) === 1);
+  if (words.length >= 2) {
+    return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
+  }
+  return label.trim().slice(0, 2).toUpperCase();
+}
+
+function wordsCount(label: string): number {
+  return label.trim().split(/\s+/).filter(Boolean).length;
+}
+
+export function RoleAwareNav({
+  onNavigate,
+  collapsed = false,
+}: Readonly<{ onNavigate?: () => void; collapsed?: boolean }>) {
   const { session, hasAnyPermission } = useSession();
   const { currentTab, tabs, activateWorkspace, closeWorkspace, isHome, openWorkspaceFromMenu } = useWorkspaceManager();
   const { isMobile } = useWorkspaceViewportMode();
@@ -315,8 +333,39 @@ export function RoleAwareNav({ onNavigate }: Readonly<{ onNavigate?: () => void 
   };
 
   return (
-    <nav className="nav-tree">
-      {sectionsWithFavorites.map((section) => {
+    <nav className={`nav-tree${collapsed ? " nav-tree--rail" : ""}`}>
+      {collapsed
+        ? visibleSections.map((section) => (
+            <div className="nav-rail__section" key={section.title}>
+              {section.items.map((item) => {
+                const relatedTabs = listWorkspaceTabsForNavItem(tabs, item.href);
+                const active =
+                  item.href === "/dashboard"
+                    ? isHome
+                    : currentTab
+                      ? getWorkspaceBasePath(currentTab.pathname) === item.href
+                      : false;
+                return (
+                  <button
+                    key={item.href}
+                    className={`nav-rail__btn${active ? " nav-rail__btn--active" : ""}`}
+                    onClick={() => {
+                      openWorkspaceFromMenu(item.href, item.label);
+                      onNavigate?.();
+                    }}
+                    title={`${item.label} — ${item.hint}`}
+                    type="button"
+                  >
+                    <span className="nav-rail__monogram">{navShortMonogram(item.label)}</span>
+                    {relatedTabs.length > 0 ? (
+                      <span className="nav-rail__badge">{relatedTabs.length}</span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          ))
+        : sectionsWithFavorites.map((section) => {
         const hasOpenSubmenu = section.items.some(
           (item) => !isMobile && shouldShowWorkspaceNavSubmenu(tabs, item.href),
         );
