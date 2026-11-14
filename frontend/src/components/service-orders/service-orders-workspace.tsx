@@ -85,6 +85,7 @@ type ServiceOrderRecord = {
   id: string;
   branchId?: string;
   customerId?: string;
+  customerName?: string | null;
   orderNo: string;
   openedAt: string;
   promisedDeliveryDate: string;
@@ -524,17 +525,66 @@ export function ServiceOrdersWorkspace() {
     return options;
   }, [customers, details]);
 
+  const enrichedOrders = useMemo(
+    () =>
+      orders.map((order) => {
+        if (order.customerName?.trim()) {
+          return order;
+        }
+        const matched = customers.find((c) => c.id === order.customerId);
+        const fallbackName = matched ? (matched.tradeName?.trim() || matched.legalName) : null;
+        return fallbackName ? { ...order, customerName: fallbackName } : order;
+      }),
+    [customers, orders],
+  );
+
   const orderLookupOptions = useMemo<SmartLookupOption[]>(
     () =>
-      orders.map((order) => ({
+      enrichedOrders.map((order) => ({
+        id: order.id,
+        label: order.customerName ? `${order.customerName} · ${order.orderNo}` : order.orderNo,
+        hint:
+          [
+            order.totalValue ? `R$ ${formatOsMoney(Number(order.totalValue))}` : null,
+            osStatusLabel(order.status),
+            formatDate(order.promisedDeliveryDate),
+            osDeliveryTypeLabel(order.deliveryType),
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined,
+      })),
+    [enrichedOrders],
+  );
+
+  const orderNoLookupOptions = useMemo<SmartLookupOption[]>(
+    () =>
+      enrichedOrders.map((order) => ({
         id: order.id,
         label: order.orderNo,
-        hint: [osStatusLabel(order.status), osDeliveryTypeLabel(order.deliveryType), order.operationalPriority]
-          .filter(Boolean)
-          .join(" · ") || undefined,
+        hint: order.customerName ?? osStatusLabel(order.status),
       })),
-    [orders],
+    [enrichedOrders],
   );
+
+  const customerNameFilterOptions = useMemo<SmartLookupOption[]>(() => {
+    const seen = new Set<string>();
+    const list: SmartLookupOption[] = [];
+    for (const order of enrichedOrders) {
+      const name = order.customerName?.trim();
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        list.push({ id: `os-cust-${order.id}`, label: name });
+      }
+    }
+    for (const cust of customers) {
+      const name = (cust.tradeName?.trim() || cust.legalName).trim();
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        list.push({ id: cust.id, label: name, hint: cust.email ?? cust.cpfCnpj ?? undefined });
+      }
+    }
+    return list;
+  }, [customers, enrichedOrders]);
 
   const productLookupOptions = useMemo<SmartLookupOption[]>(() => {
     const options = products
@@ -2160,6 +2210,13 @@ export function ServiceOrdersWorkspace() {
                 </>
               ),
             },
+            {
+              id: "customer",
+              label: "Cliente",
+              render: (row) => (
+                <strong>{row.customerName || "—"}</strong>
+              ),
+            },
             { id: "delivery", label: "Entrega", render: (row) => formatDate(row.promisedDeliveryDate) },
             { id: "pieces", label: "Peças", render: (row) => `${row.piecesCount ?? 0} pç` },
             { id: "type", label: "Tipo", render: (row) => osDeliveryTypeLabel(row.deliveryType) },
@@ -2195,12 +2252,35 @@ export function ServiceOrdersWorkspace() {
               },
             },
           ]}
-          defaultColumnIds={["name", "delivery", "pieces", "status", "value", "fiscalNo", "fiscalStatus"]}
-          emptyFilters={{ name: "", status: "", deliveryType: "", payment: "", dateBasis: "promised", dateFrom: "", dateTo: "" }}
+          defaultColumnIds={["name", "customer", "delivery", "pieces", "status", "value", "fiscalNo", "fiscalStatus"]}
+          emptyFilters={{
+            name: "",
+            customer: "",
+            orderNo: "",
+            status: "",
+            deliveryType: "",
+            payment: "",
+            dateBasis: "promised",
+            dateFrom: "",
+            dateTo: "",
+          }}
           emptyMessage="Nenhuma OS encontrada para os filtros informados."
           excelFileName="ordens-de-servico.csv"
           filterFields={[
-            { id: "name", label: "Número", lookup: true, placeholder: "Número já cadastrado" },
+            {
+              id: "customer",
+              label: "Nome do cliente",
+              lookup: true,
+              lookupOptions: customerNameFilterOptions,
+              placeholder: "Filtrar por nome do cliente",
+            },
+            {
+              id: "orderNo",
+              label: "Número da OS",
+              lookup: true,
+              lookupOptions: orderNoLookupOptions,
+              placeholder: "Ex.: AAA000015",
+            },
             {
               id: "dateBasis",
               kind: "select",
@@ -2231,6 +2311,16 @@ export function ServiceOrdersWorkspace() {
               ],
             },
             {
+              id: "payment",
+              kind: "select",
+              label: "Pagamento",
+              options: [
+                { value: "", label: "Todos" },
+                { value: "open", label: "Em aberto" },
+                { value: "paid", label: "Pago" },
+              ],
+            },
+            {
               id: "deliveryType",
               kind: "select",
               label: "Tipo de entrega",
@@ -2239,16 +2329,6 @@ export function ServiceOrdersWorkspace() {
                 { value: "Standard", label: "Normal" },
                 { value: "Priority", label: "Urgente" },
                 { value: "Express", label: "Expresso" },
-              ],
-            },
-            {
-              id: "payment",
-              kind: "select",
-              label: "Pagamento",
-              options: [
-                { value: "", label: "Todos" },
-                { value: "open", label: "Em aberto" },
-                { value: "paid", label: "Pago" },
               ],
             },
           ]}
@@ -2382,11 +2462,11 @@ export function ServiceOrdersWorkspace() {
             );
           }}
           rowMenu={buildOsRowMenu}
-          records={orders}
-          rowLabel={(row) => row.orderNo}
+          records={enrichedOrders}
+          rowLabel={(row) => (row.customerName ? `${row.orderNo} · ${row.customerName}` : row.orderNo)}
           searchKey="name"
           searchOptions={orderLookupOptions}
-          searchPlaceholder="Buscar por número"
+          searchPlaceholder="Buscar por cliente, número da OS, valor ou status..."
           title="Ordens de serviço"
         />
       ) : null}

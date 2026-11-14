@@ -14,6 +14,8 @@ function csvCell(value: string | null | undefined) {
 export type OsListRecord = {
   id: string;
   orderNo: string;
+  customerId?: string | null;
+  customerName?: string | null;
   openedAt?: string | null;
   promisedDeliveryDate: string;
   deliveryType: string;
@@ -59,8 +61,76 @@ function extractIsoDate(value: string | null | undefined): string {
   return parsed.toISOString().slice(0, 10);
 }
 
+function formatBrDateFromIso(value: string | null | undefined): string {
+  const iso = extractIsoDate(value);
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function formatMoneyVariants(value: string | null | undefined): string[] {
+  if (!value) return [];
+  const num = Number(value);
+  if (!Number.isFinite(num)) return [String(value)];
+  const fixedDot = num.toFixed(2);
+  const fixedComma = fixedDot.replace(".", ",");
+  const intPart = String(Math.trunc(num));
+  return [fixedDot, fixedComma, `r$ ${fixedComma}`, intPart];
+}
+
+function matchesSmartOsQuery(order: OsListRecord, rawQuery: string): boolean {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query) return true;
+
+  const paymentLabel =
+    order.paymentStatus === "paid"
+      ? "pago quitado"
+      : order.paymentStatus === "partial"
+        ? "parcial em aberto"
+        : "em aberto a pagar";
+
+  const compositeLabel = order.customerName
+    ? `${order.customerName} · ${order.orderNo}`
+    : order.orderNo;
+
+  const candidates = [
+    compositeLabel,
+    order.customerName ?? "",
+    order.orderNo,
+    order.deliveryType,
+    osDeliveryTypeLabel(order.deliveryType),
+    order.operationalPriority ?? "",
+    order.status,
+    osStatusLabel(order.status),
+    order.promisedDeliveryDate ?? "",
+    formatBrDateFromIso(order.promisedDeliveryDate),
+    paymentLabel,
+    ...formatMoneyVariants(order.totalValue),
+    ...formatMoneyVariants(order.outstandingBalance),
+  ];
+
+  if (candidates.some((candidate) => includesNormalized(candidate, query))) {
+    return true;
+  }
+
+  // Se o usuário selecionou "Nome da Cliente · AAA000008" do combo, também aceita bater qualquer parte separada por "·"
+  if (query.includes("·")) {
+    const parts = query
+      .split("·")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length > 0 && parts.every((part) => candidates.some((c) => includesNormalized(c, part)))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function applyOsListFilters(orders: OsListRecord[], filters: Record<string, string>): OsListRecord[] {
-  const nameQuery = (filters.name ?? "").trim().toLowerCase();
+  const smartQuery = (filters.name ?? "").trim();
+  const customerQuery = (filters.customer ?? "").trim().toLowerCase();
+  const orderNoQuery = (filters.orderNo ?? "").trim().toLowerCase();
   const statusQuery = (filters.status ?? "").trim();
   const deliveryQuery = (filters.deliveryType ?? "").trim();
   const paymentQuery = (filters.payment ?? "").trim();
@@ -69,12 +139,13 @@ export function applyOsListFilters(orders: OsListRecord[], filters: Record<strin
   const dateTo = (filters.dateTo ?? "").trim();
 
   return orders.filter((order) => {
-    if (
-      nameQuery &&
-      ![order.orderNo, order.deliveryType, order.operationalPriority ?? "", order.status].some((value) =>
-        includesNormalized(value, nameQuery),
-      )
-    ) {
+    if (smartQuery && !matchesSmartOsQuery(order, smartQuery)) {
+      return false;
+    }
+    if (customerQuery && !includesNormalized(order.customerName ?? "", customerQuery)) {
+      return false;
+    }
+    if (orderNoQuery && !includesNormalized(order.orderNo, orderNoQuery)) {
       return false;
     }
     if (statusQuery && order.status !== statusQuery) {
@@ -184,9 +255,10 @@ export function summarizeOsByStatus(orders: OsListRecord[], activeFilters: Recor
 }
 
 export function buildOsExcelCsv(orders: OsListRecord[]) {
-  const header = ["Número", "Entrega", "Tipo", "Prioridade", "Status", "Peças", "Pagamento", "Valor"];
+  const header = ["Número", "Cliente", "Entrega", "Tipo", "Prioridade", "Status", "Peças", "Pagamento", "Valor"];
   const rows = orders.map((order) => [
     order.orderNo,
+    order.customerName ?? "",
     order.promisedDeliveryDate,
     osDeliveryTypeLabel(order.deliveryType),
     order.operationalPriority ?? "",

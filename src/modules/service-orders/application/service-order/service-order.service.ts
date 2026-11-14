@@ -340,10 +340,12 @@ export class ServiceOrderService {
       membersByGroup.set(groupId, current);
     }
     const memberIds = [...new Set((siblings.length > 0 ? siblings : orders).map((order) => order.id))];
-    const [paidById, heldById, piecesById, reworkWaitingIds] = await Promise.all([
+    const customerIds = [...new Set(orders.map((order) => order.customerId).filter(Boolean))];
+    const [paidById, heldById, piecesById, customerNamesById, reworkWaitingIds] = await Promise.all([
       this.readPaidByOrderIds(memberIds),
       this.readHeldByOrderIds(memberIds),
       this.readPiecesByOrderIds(ids),
+      this.readCustomerNamesByIds(customerIds),
       this.reworkWaitingOrderIds(
         tenantId,
         orders.filter((order) => order.status === ServiceOrderStatus.QUALITY && order.bagClosed).map((order) => order.id),
@@ -355,6 +357,7 @@ export class ServiceOrderService {
         ? { amountPaid: '0.00', outstandingBalance: '0.00', paymentStatus: 'paid' as const }
         : osGroupPaymentFromMembers(members, paidById, heldById);
       return Object.assign(order, {
+        customerName: customerNamesById.get(order.customerId) ?? null,
         hasAttachments: withPhoto.has(order.id),
         piecesCount: piecesById.get(order.id) ?? 0,
         payLockedOnParent: osPayLockedOnParent(order),
@@ -2284,6 +2287,28 @@ export class ServiceOrderService {
       }
     }
     return piecesById;
+  }
+
+  private async readCustomerNamesByIds(customerIds: string[]): Promise<Map<string, string>> {
+    const namesById = new Map<string, string>();
+    if (customerIds.length === 0 || typeof this.dataSource?.query !== 'function') {
+      return namesById;
+    }
+    const placeholders = customerIds.map((_, index) => `$${index + 1}`).join(', ');
+    const rows = (await this.dataSource
+      .query(
+        `SELECT id, COALESCE(NULLIF(BTRIM(trade_name), ''), legal_name) AS name
+           FROM customers
+          WHERE id IN (${placeholders})`,
+        customerIds,
+      )
+      .catch(() => [])) as Array<{ id?: string; name?: string }>;
+    for (const row of rows) {
+      if (row.id && row.name) {
+        namesById.set(row.id, String(row.name).trim());
+      }
+    }
+    return namesById;
   }
 
   private async readPaidByOrderIds(orderIds: string[]): Promise<Map<string, number>> {

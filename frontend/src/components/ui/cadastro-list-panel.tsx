@@ -28,6 +28,7 @@ export type CadastroFilterField = {
   kind?: "text" | "select" | "date";
   options?: { value: string; label: string }[];
   lookup?: boolean;
+  lookupOptions?: SmartLookupOption[];
   maxLength?: number;
 };
 
@@ -474,7 +475,8 @@ export function CadastroListPanel<T extends { id: string }>({
                     canCreate={canWrite && !hideCreate}
                     onChange={(value) => setFilters((current) => ({ ...current, [field.id]: value }))}
                     onCreate={(name) => onCreate(name)}
-                    options={searchOptions}
+                    onSelect={(option) => setFilters((current) => ({ ...current, [field.id]: option.label }))}
+                    options={field.lookupOptions ?? searchOptions}
                     placeholder={field.placeholder}
                     value={filters[field.id] ?? ""}
                   />
