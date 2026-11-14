@@ -548,6 +548,8 @@ export class ServiceOrderService {
         outstandingBalance: financeSummary.outstandingBalance,
         paymentStatus: financeSummary.paymentStatus,
         pixCopyPaste: financeSummary.pixCopyPaste,
+        onlinePixEnabled: financeSummary.onlinePixEnabled,
+        onlineCardEnabled: financeSummary.onlineCardEnabled,
         agreed,
         agreedAt: agreed ? signature?.confirmedAt ?? null : null,
         termsText: privacy.acceptanceText,
@@ -574,12 +576,27 @@ export class ServiceOrderService {
       const serviceOrder = await this.loadPublicServiceOrder(publicToken);
       const tenant = await this.tenantService.getById(serviceOrder.tenantId);
       this.assertPublicLinkOpen(serviceOrder, await this.readPublicPrivacy(serviceOrder.tenantId, tenant.warrantyExecutionPeriodDays));
+      const financeSummary = await this.readPublicFinanceSummary(serviceOrder, tenant.displayName || tenant.legalName);
+      if (input.method === 'pix' && !financeSummary.onlinePixEnabled) {
+        throw new DomainValidationError('O pagamento por Pix online não está habilitado para este estabelecimento.');
+      }
+      if (input.method === 'card' && !financeSummary.onlineCardEnabled) {
+        throw new DomainValidationError('O pagamento por Cartão de Crédito digital não está habilitado para este estabelecimento.');
+      }
       const outstanding = await this.readOutstandingBalance(serviceOrder);
       if (outstanding <= 0) {
         return this.getPublicTrackingView(publicToken);
       }
       if (typeof this.dataSource?.query === 'function') {
         const billingScopeId = serviceOrder.groupId ?? serviceOrder.id;
+        // Cancela automaticamente qualquer cobrança pendente na maquininha física para evitar cobrança duplicada
+        await this.dataSource.query(
+          `UPDATE payment_records
+              SET status = 'canceled', updated_at = now()
+            WHERE billing_scope_id = $1
+              AND status = 'pending'`,
+          [billingScopeId],
+        );
         const modality = input.method === 'pix' ? 'pix' : 'credit';
         const paymentMethod = input.method === 'pix' ? 'pix' : 'card';
         const digits = String(input.cardNumber ?? '').replace(/\D/g, '');
@@ -2170,6 +2187,8 @@ export class ServiceOrderService {
     outstandingBalance: string;
     paymentStatus: 'pending' | 'partial' | 'paid';
     pixCopyPaste: string;
+    onlinePixEnabled: boolean;
+    onlineCardEnabled: boolean;
   }> {
     const total = Math.max(Number(serviceOrder.totalValue ?? 0), 0);
     if (typeof this.dataSource?.query !== 'function') {
@@ -2180,18 +2199,42 @@ export class ServiceOrderService {
         outstandingBalance: total.toFixed(2),
         paymentStatus: hasBalance ? 'pending' : 'paid',
         pixCopyPaste: `00020126580014BR.GOV.BCB.PIX0136${serviceOrder.id}520400005303986540${total.toFixed(2)}5802BR5920${companyName.slice(0, 20).toUpperCase()}6009SAO PAULO62070503***6304ABCD`,
+        onlinePixEnabled: false,
+        onlineCardEnabled: false,
       };
     }
-    const outstanding = Math.max(await this.readOutstandingBalance(serviceOrder), 0);
-    const paid = Math.max(Number((total - outstanding).toFixed(2)), 0);
+    const [outstanding, providerCfgRows] = await Promise.all([
+      this.readOutstandingBalance(serviceOrder),
+      this.dataSource
+        .query(
+          `SELECT p.credentials
+             FROM payment_provider_configs p
+             JOIN branches b ON b.company_id = p.company_id AND b.tenant_id = p.tenant_id
+            WHERE b.id = $1
+              AND p.tenant_id = $2
+              AND p.status = 'active'
+              AND p.is_deleted = false
+            ORDER BY p.updated_at DESC
+            LIMIT 1`,
+          [serviceOrder.branchId, serviceOrder.tenantId],
+        )
+        .catch(() => []),
+    ]);
+    const cleanOutstanding = Math.max(outstanding, 0);
+    const paid = Math.max(Number((total - cleanOutstanding).toFixed(2)), 0);
     const paymentStatus: 'pending' | 'partial' | 'paid' =
-      outstanding <= 0 ? 'paid' : paid > 0 ? 'partial' : 'pending';
+      cleanOutstanding <= 0 ? 'paid' : paid > 0 ? 'partial' : 'pending';
+    const creds = (providerCfgRows?.[0]?.credentials ?? {}) as Record<string, string>;
+    const onlinePixEnabled = creds.onlinePixEnabled === 'true';
+    const onlineCardEnabled = creds.onlineCardEnabled === 'true';
     return {
-      paymentLabel: outstanding > 0 ? 'Saldo em aberto' : 'Pago',
+      paymentLabel: cleanOutstanding > 0 ? 'Saldo em aberto' : 'Pago',
       paidAmount: paid.toFixed(2),
-      outstandingBalance: outstanding.toFixed(2),
+      outstandingBalance: cleanOutstanding.toFixed(2),
       paymentStatus,
-      pixCopyPaste: `00020126580014BR.GOV.BCB.PIX0136${serviceOrder.id}520400005303986540${outstanding.toFixed(2)}5802BR5920${companyName.slice(0, 20).toUpperCase()}6009SAO PAULO62070503***6304C1E0`,
+      pixCopyPaste: `00020126580014BR.GOV.BCB.PIX0136${serviceOrder.id}520400005303986540${cleanOutstanding.toFixed(2)}5802BR5920${companyName.slice(0, 20).toUpperCase()}6009SAO PAULO62070503***6304C1E0`,
+      onlinePixEnabled,
+      onlineCardEnabled,
     };
   }
 

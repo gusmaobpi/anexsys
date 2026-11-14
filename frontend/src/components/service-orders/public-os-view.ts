@@ -31,6 +31,8 @@ export type PublicOsTrackingView = {
   outstandingBalance?: string | null;
   paymentStatus?: "pending" | "partial" | "paid" | null;
   pixCopyPaste?: string | null;
+  onlinePixEnabled?: boolean;
+  onlineCardEnabled?: boolean;
   agreed?: boolean;
   agreedAt?: string | null;
   termsText?: string | null;

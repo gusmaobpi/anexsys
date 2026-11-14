@@ -29,28 +29,41 @@ type ProviderConfigForm = {
   provider: string;
   environment: string;
   credentials: CredentialEntry[];
+  onlinePixEnabled: boolean;
+  onlineCardEnabled: boolean;
   active: boolean;
 };
+
+const ONLINE_CONTROL_KEYS = new Set(["onlinePixEnabled", "onlineCardEnabled"]);
 
 const emptyForm = (): ProviderConfigForm => ({
   provider: "cielo",
   environment: "sandbox",
   credentials: [],
+  onlinePixEnabled: false,
+  onlineCardEnabled: false,
   active: true,
 });
 
 function credentialsToEntries(credentials: Record<string, string>): CredentialEntry[] {
-  return Object.entries(credentials ?? {}).map(([key, value]) => ({ key, value: String(value) }));
+  return Object.entries(credentials ?? {})
+    .filter(([key]) => !ONLINE_CONTROL_KEYS.has(key))
+    .map(([key, value]) => ({ key, value: String(value) }));
 }
 
-function entriesToCredentials(entries: CredentialEntry[]): Record<string, string> {
+function entriesToCredentials(
+  entries: CredentialEntry[],
+  options?: { onlinePixEnabled?: boolean; onlineCardEnabled?: boolean },
+): Record<string, string> {
   const credentials: Record<string, string> = {};
   for (const entry of entries) {
     const key = entry.key.trim();
-    if (key) {
+    if (key && !ONLINE_CONTROL_KEYS.has(key)) {
       credentials[key] = entry.value;
     }
   }
+  credentials.onlinePixEnabled = options?.onlinePixEnabled ? "true" : "false";
+  credentials.onlineCardEnabled = options?.onlineCardEnabled ? "true" : "false";
   return credentials;
 }
 
@@ -195,6 +208,8 @@ export function PaymentProvidersWorkspace() {
       provider: record.provider,
       environment: record.environment,
       credentials: credentialsToEntries(record.credentials),
+      onlinePixEnabled: record.credentials?.onlinePixEnabled === "true",
+      onlineCardEnabled: record.credentials?.onlineCardEnabled === "true",
       active: record.status === "active",
     });
   }, [focusRecordId, records, setForm, workspaceMode]);
@@ -215,7 +230,10 @@ export function PaymentProvidersWorkspace() {
           companyId: activeEmpresaId,
           provider: form.provider,
           environment: form.environment,
-          credentials: entriesToCredentials(form.credentials),
+          credentials: entriesToCredentials(form.credentials, {
+            onlinePixEnabled: form.onlinePixEnabled,
+            onlineCardEnabled: form.onlineCardEnabled,
+          }),
         }),
       });
       setMessage(
@@ -246,7 +264,10 @@ export function PaymentProvidersWorkspace() {
         status?: "active" | "inactive";
       } = {
         environment: form.environment,
-        credentials: entriesToCredentials(form.credentials),
+        credentials: entriesToCredentials(form.credentials, {
+          onlinePixEnabled: form.onlinePixEnabled,
+          onlineCardEnabled: form.onlineCardEnabled,
+        }),
       };
       if (form.active !== (activeRecord.status === "active")) {
         body.status = form.active ? "active" : "inactive";
@@ -494,6 +515,30 @@ export function PaymentProvidersWorkspace() {
                 <small className="table-subtle">
                   Cielo: as chaves têm de ser exatamente clientId, accessToken e merchantId. O texto longo do portal entra em accessToken. Não use clientSecret.
                 </small>
+              </div>
+              <div className="os-box" style={{ display: "grid", gap: 10 }}>
+                <span className="os-box__title">Formas de pagamento digital no link da OS (WhatsApp / E-commerce)</span>
+                <p className="table-subtle" style={{ marginTop: 0 }}>
+                  Escolha se o formulário enviado ao cliente no WhatsApp exibirá as opções de pagamento digital (Pix, Cartão de Crédito ou ambas). A maquininha física continua integrada normalmente no balcão, e quem pagar primeiro atualiza o status em todos os lugares.
+                </p>
+                <label className="field field--checkbox">
+                  <input
+                    checked={form.onlinePixEnabled}
+                    disabled={saving}
+                    type="checkbox"
+                    onChange={(event) => setForm((current) => ({ ...current, onlinePixEnabled: event.target.checked }))}
+                  />
+                  <span>Habilitar pagamento por Pix no link da OS</span>
+                </label>
+                <label className="field field--checkbox">
+                  <input
+                    checked={form.onlineCardEnabled}
+                    disabled={saving}
+                    type="checkbox"
+                    onChange={(event) => setForm((current) => ({ ...current, onlineCardEnabled: event.target.checked }))}
+                  />
+                  <span>Habilitar pagamento por Cartão de Crédito digital no link da OS</span>
+                </label>
               </div>
               {workspaceMode !== "new" ? (
                 <label className="field field--checkbox">

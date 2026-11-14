@@ -137,6 +137,28 @@ export default function PublicOsPage() {
   const outstandingFormatted = formatOsMoney(Math.max(outstandingAmount, 0));
   const isPaid = outstandingAmount <= 0 || view?.paymentStatus === "paid" || view?.paymentLabel === "Pago";
   const stageIdx = view ? resolvePublicOsStageIndex(view.status) : 0;
+  const allowOnlinePix = Boolean(view?.onlinePixEnabled);
+  const allowOnlineCard = Boolean(view?.onlineCardEnabled);
+  const hasAnyOnlinePayment = allowOnlinePix || allowOnlineCard;
+  const effectivePayMethod: "pix" | "card" =
+    allowOnlinePix && allowOnlineCard
+      ? payMethod
+      : allowOnlinePix
+        ? "pix"
+        : "card";
+
+  // Consulta automática de 5 em 5s para refletir baixa automática (Pix, Cartão ou Maquininha física)
+  useEffect(() => {
+    if (!token || !view || isPaid || view.status === "cancelled") {
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      void publicJson<PublicOsTrackingView>(`/os/${token}/data`)
+        .then((next) => setView(next))
+        .catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [isPaid, token, view]);
 
   async function confirmConcordo() {
     setSaving(true);
@@ -537,69 +559,71 @@ export default function PublicOsPage() {
                   </p>
                 ) : null}
 
-                {!isPaid && view.status !== "cancelled" ? (
+                {!isPaid && view.status !== "cancelled" && hasAnyOnlinePayment ? (
                   <>
-                    {/* DOIS BOTÕES GÊMEOS LADO A LADO (50% PIX | 50% CARTÃO) */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPayMethod("pix");
-                          setPayError(null);
-                        }}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 8,
-                          minHeight: 44,
-                          borderRadius: 12,
-                          border: payMethod === "pix" ? "2px solid var(--primary)" : "1px solid var(--border)",
-                          background: payMethod === "pix" ? "var(--primary-soft)" : "#ffffff",
-                          color: payMethod === "pix" ? "var(--primary)" : "var(--text-primary)",
-                          fontWeight: 700,
-                          fontSize: 14,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
-                          <path d="M12 2L22 12L12 22L2 12L12 2Z" />
-                          <path d="M8.5 8.5L15.5 15.5M15.5 8.5L8.5 15.5" />
-                        </svg>
-                        <span>Pix</span>
-                      </button>
+                    {/* SE AMBOS ESTIVEREM HABILITADOS PELO ESTABELECIMENTO, MOSTRA LADO A LADO (50% PIX | 50% CARTÃO) */}
+                    {allowOnlinePix && allowOnlineCard ? (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPayMethod("pix");
+                            setPayError(null);
+                          }}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 8,
+                            minHeight: 44,
+                            borderRadius: 12,
+                            border: effectivePayMethod === "pix" ? "2px solid var(--primary)" : "1px solid var(--border)",
+                            background: effectivePayMethod === "pix" ? "var(--primary-soft)" : "#ffffff",
+                            color: effectivePayMethod === "pix" ? "var(--primary)" : "var(--text-primary)",
+                            fontWeight: 700,
+                            fontSize: 14,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                            <path d="M12 2L22 12L12 22L2 12L12 2Z" />
+                            <path d="M8.5 8.5L15.5 15.5M15.5 8.5L8.5 15.5" />
+                          </svg>
+                          <span>Pix</span>
+                        </button>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPayMethod("card");
-                          setPayError(null);
-                        }}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 8,
-                          minHeight: 44,
-                          borderRadius: 12,
-                          border: payMethod === "card" ? "2px solid var(--primary)" : "1px solid var(--border)",
-                          background: payMethod === "card" ? "var(--primary-soft)" : "#ffffff",
-                          color: payMethod === "card" ? "var(--primary)" : "var(--text-primary)",
-                          fontWeight: 700,
-                          fontSize: 14,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
-                          <rect x="2" y="5" width="20" height="14" rx="2.5" />
-                          <line x1="2" y1="10" x2="22" y2="10" />
-                        </svg>
-                        <span>Cartão</span>
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPayMethod("card");
+                            setPayError(null);
+                          }}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 8,
+                            minHeight: 44,
+                            borderRadius: 12,
+                            border: effectivePayMethod === "card" ? "2px solid var(--primary)" : "1px solid var(--border)",
+                            background: effectivePayMethod === "card" ? "var(--primary-soft)" : "#ffffff",
+                            color: effectivePayMethod === "card" ? "var(--primary)" : "var(--text-primary)",
+                            fontWeight: 700,
+                            fontSize: 14,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                            <rect x="2" y="5" width="20" height="14" rx="2.5" />
+                            <line x1="2" y1="10" x2="22" y2="10" />
+                          </svg>
+                          <span>Cartão</span>
+                        </button>
+                      </div>
+                    ) : null}
 
-                    {/* CONTEÚDO DA ABA PIX */}
-                    {payMethod === "pix" ? (
+                    {/* CONTEÚDO DA ABA PIX (BAIXA 100% AUTOMÁTICA PELA OPERADORA, SEM BOTÃO "JÁ PAGUEI") */}
+                    {allowOnlinePix && effectivePayMethod === "pix" ? (
                       <div
                         style={{
                           padding: 14,
@@ -635,33 +659,23 @@ export default function PublicOsPage() {
                               Pix Copia e Cola
                             </strong>
                             <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                              Copie o código abaixo, cole no aplicativo do seu banco e confirme abaixo para baixar sua OS na hora.
+                              Copie o código abaixo e pague no aplicativo do seu banco. A baixa é automática assim que a operadora confirmar.
                             </span>
                           </div>
                         </div>
 
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                          <button
-                            className="button-secondary"
-                            onClick={() => void handleCopyPix()}
-                            type="button"
-                          >
-                            {pixCopied ? "✓ Copiado!" : "Copiar Código Pix"}
-                          </button>
-                          <button
-                            className="button"
-                            disabled={saving}
-                            onClick={() => void handleOnlinePay("pix")}
-                            type="button"
-                          >
-                            {saving ? "Confirmando…" : "Já paguei o Pix"}
-                          </button>
-                        </div>
+                        <button
+                          className="button public-os__cta"
+                          onClick={() => void handleCopyPix()}
+                          type="button"
+                        >
+                          {pixCopied ? "✓ Código Pix Copiado!" : "Copiar Código Pix"}
+                        </button>
                       </div>
                     ) : null}
 
                     {/* CONTEÚDO DA ABA CARTÃO (CÂMERA + AUTOFILL + AUTO-TAB) */}
-                    {payMethod === "card" ? (
+                    {allowOnlineCard && effectivePayMethod === "card" ? (
                       <div
                         style={{
                           padding: 14,
