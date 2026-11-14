@@ -23,6 +23,7 @@ const remoteScript = [
   `git pull --ff-only origin ${LIGHTSAIL_BRANCH}`,
   'npm run build',
   'npm run migration:run:prod',
+  'npm --prefix frontend install --no-audit --no-fund',
   'npm run frontend:build',
   'pm2 restart anexsys-homolog --update-env',
   'pm2 restart anexsys-frontend --update-env',

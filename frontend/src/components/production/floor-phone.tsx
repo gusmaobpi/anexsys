@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import jsQR from "jsqr";
 import { describeWorkspaceError } from "@/components/ui/workspace-flash";
 
 async function publicFloor<T>(path: string, body: unknown): Promise<T> {
@@ -143,14 +144,24 @@ export function FloorPhone() {
     let stopped = false;
     let stream: MediaStream | null = null;
     const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
     void navigator.mediaDevices
-      ?.getUserMedia({ video: { facingMode: "environment" } })
+      ?.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      })
       .then(async (next) => {
         stream = next;
         if (!video || stopped) {
           next.getTracks().forEach((track) => track.stop());
           return;
         }
+        video.setAttribute("playsinline", "true");
         video.srcObject = next;
         await video.play();
         const detector =
@@ -164,12 +175,29 @@ export function FloorPhone() {
               ).BarcodeDetector({ formats: ["qr_code"] })
             : null;
         const tick = async () => {
-          if (stopped || !detector || !video) return;
-          const found = await detector.detect(video).catch(() => []);
-          if (found[0]?.rawValue) {
-            stopped = true;
-            void readCode(found[0].rawValue);
-            return;
+          if (stopped || !video) return;
+          if (detector) {
+            const found = await detector.detect(video).catch(() => []);
+            if (found[0]?.rawValue) {
+              stopped = true;
+              void readCode(found[0].rawValue);
+              return;
+            }
+          }
+          if (ctx && video.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+            const scale = Math.min(1, 640 / Math.max(video.videoWidth, video.videoHeight));
+            const w = Math.max(1, Math.floor(video.videoWidth * scale));
+            const h = Math.max(1, Math.floor(video.videoHeight * scale));
+            if (canvas.width !== w) canvas.width = w;
+            if (canvas.height !== h) canvas.height = h;
+            ctx.drawImage(video, 0, 0, w, h);
+            const imageData = ctx.getImageData(0, 0, w, h);
+            const qrResult = jsQR(imageData.data, w, h, { inversionAttempts: "dontInvert" });
+            if (qrResult?.data?.trim()) {
+              stopped = true;
+              void readCode(qrResult.data.trim());
+              return;
+            }
           }
           requestAnimationFrame(() => void tick());
         };

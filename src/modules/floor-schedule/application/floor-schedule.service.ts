@@ -852,7 +852,31 @@ export class FloorScheduleService {
   }
 
   private async operationalCard(tenantId: string, codeValue: string, accessibleBranchIds: string[]) {
-    const qr = await this.productionOrderService.getActiveQrCodeByValue(tenantId, codeValue.trim());
+    const cleanCode = codeValue.trim();
+    let qr = await this.productionOrderService.getActiveQrCodeByValue(tenantId, cleanCode);
+    if (!qr) {
+      const fallbackRows = (await this.dataSource
+        .query(
+          `SELECT q.production_order_id AS "productionOrderId", q.code_value AS "codeValue"
+             FROM qr_codes q
+             JOIN production_orders po ON po.id = q.production_order_id AND po.tenant_id = q.tenant_id
+             JOIN service_orders so ON so.id = po.service_order_id AND so.tenant_id = q.tenant_id
+            WHERE q.tenant_id = $1
+              AND q.is_active = true
+              AND (
+                UPPER(so.order_no) = UPPER($2)
+                OR UPPER(po.production_no) = UPPER($2)
+                OR ($2 ~ '^\\d+$' AND UPPER(so.order_no) LIKE '%' || LPAD($2, 6, '0'))
+              )
+            ORDER BY q.issued_at DESC
+            LIMIT 1`,
+          [tenantId, cleanCode],
+        )
+        .catch(() => [])) as Array<{ productionOrderId?: string; codeValue?: string }>;
+      if (fallbackRows[0]?.codeValue) {
+        qr = await this.productionOrderService.getActiveQrCodeByValue(tenantId, fallbackRows[0].codeValue);
+      }
+    }
     if (!qr) {
       throw new DomainValidationError('QR da ordem de produção não encontrado.');
     }
